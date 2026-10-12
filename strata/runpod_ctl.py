@@ -115,7 +115,7 @@ def main():
     ap.add_argument("--family", default="qwen"); ap.add_argument("--low-ram", default="on", choices=["on", "off", "auto"])
     ap.add_argument("--env", action="append", default=[], metavar="KEY=VALUE", help="weitere Umgebungsvariable (wiederholbar)")
     ap.add_argument("--volume-gb", type=int, default=150)
-    ap.add_argument("--container-gb", type=int, default=200, help="Container-Disk: Engine und Modelldaten liegen lokal unter /tmp (COPY_DATA_LOCAL=yes)")
+    ap.add_argument("--container-gb", type=int, default=150, help="Container-Disk: Engine und Modelldaten liegen lokal unter /tmp (COPY_DATA_LOCAL=yes)")
     ap.add_argument("--min-ram", type=int, default=48, help="mindestens GB RAM pro GPU (Pod-Limit, nicht Host-RAM)")
     ap.add_argument("--network-volume"); ap.add_argument("--idle", type=int, default=60)
     sub = ap.add_subparsers(dest="kind", required=True)

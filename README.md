@@ -54,7 +54,7 @@ API_KEY=<secret> MODEL=IQ2_XS LOW_RAM=resident /opt/runpod/start.sh
 ## Pod template in the console
 
 - **Container Image**: `ghcr.io/<owner>/strata-runpod:v0.1.<run>` (make the package public, or add a Container Registry Auth entry for `ghcr.io`)
-- **Container Disk**: 200 GB (engine and data live under `/tmp`; IQ2_XS needs ~115 GB, IQ3_XXS ~135 GB); **Volume**: the store, 150 GB+
+- **Container Disk**: 150 GB (engine and data live under `/tmp`; IQ2_XS measured 73 GiB, up to ~106 GiB if the setup also writes `experts.bin`; IQ3_XXS ~81-121 GiB, estimated); **Volume**: the store, 150 GB+
 - **TCP Port** `22` (SSH), **HTTP Port** `8080`; pod filter CUDA 13.0 (driver >= 580), RAM at least what `MODEL` needs
 - Env: see the table. Connect via Web Terminal or SSH (add your public key under Settings -> SSH Public Keys first).
 

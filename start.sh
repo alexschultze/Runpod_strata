@@ -156,8 +156,12 @@ fi
 export STRATA_POST_SETUP=/opt/runpod/post-setup.sh
 
 # ---- 2. the data ---------------------------------------------------------------------------------------------------------
-# estimated GiB on the local disk (download + pack + MTP) when nothing is on the volume yet
-case "$MODEL" in Q2_0) NEED=100 ;; IQ2_XS) NEED=115 ;; IQ3_XXS) NEED=135 ;; IQ3_S) NEED=150 ;; IQ1_M) NEED=90 ;; UD-IQ4_XS) NEED=115 ;; UD-Q4_K_XL) NEED=130 ;; *) NEED=150 ;; esac
+# GiB on the local disk when nothing is on the volume yet: models + mtp + pack + Strata. IQ2_XS measured (64 + 6.9 + 1.5 + 0.7 = 73 GiB,
+# no experts.bin in that run), the others scaled from Strata's download sizes. EXTRA: experts.bin, which a setup in the low-RAM mode may add.
+case "$MODEL" in
+    Q2_0) NEED=72; EXTRA=32 ;;      IQ2_XS) NEED=73; EXTRA=33 ;;    IQ3_XXS) NEED=81; EXTRA=40 ;;  IQ3_S) NEED=88; EXTRA=47 ;;
+    IQ1_M) NEED=64; EXTRA=22 ;;     UD-IQ4_XS) NEED=97; EXTRA=0 ;;  UD-Q4_K_XL) NEED=113; EXTRA=0 ;; *) NEED=100; EXTRA=40 ;;
+esac
 avail_gib() { df -BG --output=avail "$1" | tail -1 | tr -dc 0-9; }
 if [ "$COPY_DATA_LOCAL" = yes ]; then
     if [ ! -f "$STRATA_DATA/.local-complete" ] && [ -n "$STRATA_STORE" ] && [ -f "$STRATA_STORE/data/.complete" ]; then
@@ -167,7 +171,7 @@ if [ "$COPY_DATA_LOCAL" = yes ]; then
         rsync -a --partial --exclude=logs --exclude=.complete "$STRATA_STORE/data/" "$STRATA_DATA/"
         touch "$STRATA_DATA/.local-complete"
     elif [ ! -f "$STRATA_DATA/.local-complete" ]; then
-        [ "$(avail_gib "$STRATA_DATA")" -ge "$NEED" ] || echo "start.sh: WARNING: $(avail_gib "$STRATA_DATA") GiB free under $STRATA_DATA, about $NEED GiB are needed for $MODEL (raise the container disk or set COPY_DATA_LOCAL=no)" >&2
+        [ "$(avail_gib "$STRATA_DATA")" -ge "$((NEED + 5))" ] || echo "start.sh: WARNING: $(avail_gib "$STRATA_DATA") GiB free under $STRATA_DATA, $MODEL needs about $NEED GiB (+$EXTRA GiB if the setup writes experts.bin): raise the container disk or set COPY_DATA_LOCAL=no" >&2
     fi
 elif [ -n "$STRATA_STORE" ]; then   # data stays on the volume: the big folders are links, the config is a local copy (pushed back by post-setup.sh)
     for d in models packs mtp; do
