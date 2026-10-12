@@ -1,0 +1,37 @@
+# Git
+.git
+.gitignore
+
+# Documentation
+docs/
+*.md
+README.md
+
+# Strata deployment files (separate from this template image)
+strata/*
+!strata/bench
+.github/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+.venv/
+
+# uv
+uv.lock
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
