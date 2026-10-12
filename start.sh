@@ -13,7 +13,7 @@
 #   COPY_DATA_LOCAL=yes|no    copy the model data to the local disk (default yes, needs a big container disk) or use it on the volume
 #   STRATA_STORE   the volume's store, default <volume>/strata-store (volume: /runpod-volume, else /workspace if mounted)
 #   STRATA_LOCAL   local base, default /tmp (Strata in <base>/Strata, data in <base>/Strata-data)
-#   STRATA_REF / STRATA_REPO   branch/tag and URL of the Strata repo (default: HEAD of Niko1221/Strata); the commit is part of the key
+#   STRATA_REF / STRATA_REPO   Strata to use: latest (default: newest release tag), a tag like v0.1.43.1, a branch, or HEAD; the tag is part of the key
 #   POOL_WORKERS   CPU expert workers written into a new config: default pod CPU quota minus 3 (min 4), 0 = leave Strata's choice
 #   MODE=pod|lb|queue   Strata on :8080 | proxy with /ping on $PORT | runpod queue handler
 #   RESIDENT_BUDGET_GIB  unsloth only: GiB of experts kept in RAM, default pod RAM (cgroup limit) minus 24
@@ -85,16 +85,30 @@ fail_alive() { echo "start.sh: $*" >&2; exec sleep infinity; }   # keeps the pod
 gpu_arch() { nvidia-smi --query-gpu=compute_cap --format=csv,noheader 2>/dev/null | tr -d '. ' | sort -u | paste -sd+ -; }
 cpu_isa()  { grep -m1 '^flags' /proc/cpuinfo | tr ' ' '\n' | grep -E '^(avx|avx2|fma|f16c|bmi1|bmi2|avx512.*|avx_vnni|amx.*)$' | sort | tr '\n' ' ' | sha1sum | cut -c1-8; }
 ARCH=$(gpu_arch); ARCH="${ARCH:-nogpu}"; ISA=$(cpu_isa)
-SHA=$(git ls-remote "$STRATA_REPO" "${STRATA_REF:-HEAD}" 2>/dev/null | awk 'NR==1 {print substr($1, 1, 12)}')
-if [ -z "$SHA" ] && [ -n "$STRATA_STORE" ]; then   # GitHub not reachable: take the newest archive for this GPU and CPU
-    last=$(ls -t "$STRATA_STORE"/app-sm"$ARCH"-"$ISA"-*.tar 2>/dev/null | head -1)
-    [ -n "$last" ] && SHA=$(basename "$last" .tar | sed "s/^app-sm$ARCH-$ISA-//")
+# Which Strata: STRATA_REF = latest (default: the newest release tag v*), a tag (v0.1.43.1), a branch, or HEAD. The key carries the tag
+# (stable, readable); for a branch or HEAD it carries branch-<commit>, because those move.
+REF="${STRATA_REF:-latest}"
+if [ "$REF" = latest ]; then
+    REF=$(git ls-remote --tags --refs --sort=-v:refname "$STRATA_REPO" 'v*' 2>/dev/null | head -1 | sed 's#.*refs/tags/##')
+    if [ -z "$REF" ]; then REF=HEAD; LATEST_FAILED=1; fi
 fi
-export KEY="sm${ARCH}-${ISA}-${SHA:-unknown}"
+SHA=$(git ls-remote "$STRATA_REPO" "$REF" 2>/dev/null | awk 'NR==1 {print substr($1, 1, 12)}')
+LABEL=""
+if [ -n "$SHA" ]; then
+    if git ls-remote --tags --refs "$STRATA_REPO" "refs/tags/$REF" 2>/dev/null | grep -q .; then LABEL="$REF"
+    else LABEL="$(printf '%s' "$REF" | tr 'A-Z/' 'a-z-')-$SHA"; fi
+elif [ -n "$STRATA_STORE" ]; then   # GitHub not reachable: take the newest archive for this GPU and CPU
+    last=$(ls -t "$STRATA_STORE"/app-sm"$ARCH"-"$ISA"-*.tar 2>/dev/null | head -1)
+    [ -n "$last" ] && LABEL=$(basename "$last" .tar | sed "s/^app-sm$ARCH-$ISA-//") && echo "start.sh: GitHub not reachable, using the newest archive ($LABEL)"
+fi
+[ -n "${LATEST_FAILED:-}" ] && echo "start.sh: no release tag found, using HEAD" >&2
+CLONE_REF=""; [ "$REF" != HEAD ] && CLONE_REF="$REF"
+export ARCH ISA SHA LABEL KEY="sm${ARCH}-${ISA}-${LABEL:-unknown}"
 ARCHIVE="${STRATA_STORE:+$STRATA_STORE/app-$KEY.tar}"
 echo "start.sh: engine key $KEY"
 
-app_ready() { [ -f "$STRATA_HOME/.venv/.strata-bootstrap-done" ] && [ -f "$STRATA_HOME/engine/BUILD.json" ]; }
+# ready = the Python environment and the engine are there AND they belong to this key (GPU architecture, CPU, Strata commit)
+app_ready() { [ -f "$STRATA_HOME/.venv/.strata-bootstrap-done" ] && [ -f "$STRATA_HOME/engine/BUILD.json" ] && [ "$(cat "$STRATA_HOME/.strata-key" 2>/dev/null)" = "$KEY" ]; }
 if ! app_ready; then
     if [ -n "$ARCHIVE" ] && [ -f "$ARCHIVE" ]; then
         echo "start.sh: restoring the engine from $ARCHIVE"
@@ -103,10 +117,14 @@ if ! app_ready; then
     fi
 fi
 if ! app_ready; then   # no archive for this key: clone and prepare the Python environment; setup.py builds the engine below
+    if [ -f "$STRATA_HOME/.strata-key" ] && [ "$(cat "$STRATA_HOME/.strata-key")" != "$KEY" ]; then
+        echo "start.sh: the local Strata ($(cat "$STRATA_HOME/.strata-key")) is not the one for key $KEY: setting it up again"
+        rm -rf "${STRATA_HOME:?}"
+    fi
     if [ ! -d "$STRATA_HOME/.git" ]; then
-        echo "start.sh: cloning $STRATA_REPO ${STRATA_REF:+(ref $STRATA_REF) }into $STRATA_HOME"
+        echo "start.sh: cloning $STRATA_REPO (${CLONE_REF:-HEAD}) into $STRATA_HOME"
         rm -rf "${STRATA_HOME:?}.tmp"
-        git clone --depth 1 ${STRATA_REF:+--branch "$STRATA_REF"} "$STRATA_REPO" "$STRATA_HOME.tmp"
+        git clone --depth 1 ${CLONE_REF:+--branch "$CLONE_REF"} "$STRATA_REPO" "$STRATA_HOME.tmp"
         rm -rf "${STRATA_HOME:?}"; mv "$STRATA_HOME.tmp" "$STRATA_HOME"
     fi
     if [ ! -f "$STRATA_HOME/.venv/.strata-bootstrap-done" ]; then
@@ -118,8 +136,11 @@ if ! app_ready; then   # no archive for this key: clone and prepare the Python e
         "$STRATA_HOME/.venv/bin/pip" install --no-cache-dir runpod requests
         touch "$STRATA_HOME/.venv/.strata-bootstrap-done"
     fi
+    echo "$KEY" > "$STRATA_HOME/.strata-key"
 fi
 chmod +x "$STRATA_HOME/setup.sh" "$STRATA_HOME/docker-entrypoint.sh"
+export STRATA_VERSION=$(sed -n 's/^project(strata VERSION \([0-9.]*\).*/\1/p' "$STRATA_HOME/CMakeLists.txt" 2>/dev/null | head -1)
+echo "start.sh: Strata ${STRATA_VERSION:-?} (${LABEL:-unknown}, commit ${SHA:-unknown})"
 ln -sfn "$STRATA_HOME" /opt/strata          # Strata's entrypoint works in /opt/strata
 
 # Strata's entrypoint sets up (engine build, download) and then starts the server in one go. Hook between the two: post-setup.sh
@@ -156,6 +177,14 @@ elif [ -n "$STRATA_STORE" ]; then   # data stays on the volume: the big folders 
     if [ ! -d "$STRATA_DATA/config" ] && [ -d "$STRATA_STORE/data/config" ]; then cp -a "$STRATA_STORE/data/config" "$STRATA_DATA/config"; fi
 else
     fail_alive "COPY_DATA_LOCAL=no needs a volume, none was found"
+fi
+
+# Data and config written by another Strata version: let Strata's setup adapt them (REINSTALL=1 re-runs the setup with --yes; files
+# already on disk are found, not downloaded again). config/.built-with holds the Strata commit that wrote the config (the commit, not the tag: a tag and HEAD can be the same code) (post-setup.sh).
+BUILT_WITH="$STRATA_DATA/config/.built-with"
+if [ -f "$BUILT_WITH" ] && [ -f "$STRATA_DATA/config/strata-$TAG.json" ] && [ -n "${SHA:-}" ] && [ "$(cat "$BUILT_WITH")" != "$SHA" ] && [ "${REINSTALL:-0}" != 1 ]; then
+    export REINSTALL=1
+    echo "start.sh: the config was written by Strata commit $(cat "$BUILT_WITH"), this is ${LABEL:-$SHA} (commit $SHA): REINSTALL=1 for this start (your own edits of the config's args are lost, calibration and pool workers are applied again)"
 fi
 
 # Strata writes its engine log to /opt/strata/strata-<tag>.log: link it to the volume so it survives a restart

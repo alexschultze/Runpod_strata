@@ -10,7 +10,7 @@ The network volume is slow for small files and random reads (measured: geesefs 8
 and data are installed and run under `/tmp`** (local disk); the volume is only the store.
 
 `start.sh` does, in this order:
-1. **Engine.** Computes a key `sm<GPU arch>-<CPU flags hash>-<Strata commit>`. If `<store>/app-<key>.tar` exists it is unpacked to
+1. **Engine.** Computes a key `sm<GPU arch>-<CPU flags hash>-<Strata tag>` (for example `sm86-aeb253d3-v0.1.43.1`; for a branch or HEAD `sm86-aeb253d3-head-<commit>`). If `<store>/app-<key>.tar` exists it is unpacked to
    `/tmp/Strata` (about 0.5 GB). Otherwise it clones Strata, creates the Python environment, and Strata's `setup.py` builds the engine
    (3-4 minutes measured on a 128-core host; longer with fewer CPUs).
 2. **Data** (`models/`, `packs/` with `experts.bin`, `mtp/`, `config/`) in `/tmp/Strata-data`:
@@ -23,7 +23,7 @@ and data are installed and run under `/tmp`** (local disk); the volume is only t
 
 The store is `<volume>/strata-store` (volume: `/runpod-volume`, else `/workspace` if a volume is mounted there):
 `app-<key>.tar`, `data/` (mirror of `/tmp/Strata-data`, `data/.complete` marks a finished push), `logs/`, `xdg/` (Strata's `settings.json`
-incl. calibrations). A different CPU, GPU architecture or Strata commit gives a different key and a rebuild (the engine is compiled for
+incl. calibrations). A different CPU, GPU architecture or Strata version gives a different key and a rebuild; `app-<key>.json` next to the archive names version, tag and commit; the newest 3 archives per GPU and CPU are kept (the engine is compiled for
 the CPU's instruction sets and the GPU architecture it was built on).
 
 `entry.sh` (entry point) starts sshd and then waits; **nothing starts automatically** unless `AUTO_START=yes` (always for `MODE=lb|queue`).
@@ -44,7 +44,7 @@ API_KEY=<secret> MODEL=IQ2_XS LOW_RAM=resident /opt/runpod/start.sh
 | `LOW_RAM` | `on` | `on`/`auto`: Strata chooses; `resident`: experts copied into RAM once at start (recommended with limited RAM); `mmap`: read from the data folder; `off`. Strata cannot see the pod's RAM limit (it reads the host's), so set `resident` or `mmap` explicitly when the limit is below experts + 10 GB. No effect for `unsloth` |
 | `COPY_DATA_LOCAL` | `yes` | copy model data from the store to `/tmp` (needs a big container disk), or use it on the volume |
 | `AUTO_START` | `no` | start Strata automatically (otherwise run `/opt/runpod/start.sh`) |
-| `STRATA_REF`, `STRATA_REPO` | HEAD of `Niko1221/Strata` | branch/tag and URL to clone; the commit is part of the key. Pin a tag to avoid a rebuild whenever upstream moves |
+| `STRATA_REF`, `STRATA_REPO` | `latest`, `Niko1221/Strata` | Strata to use: `latest` (newest release tag `v*`), a tag such as `v0.1.43.1` (pin), a branch or `HEAD` (key `head-<commit>`, rebuild on every upstream commit). A new version rebuilds the engine and runs Strata's setup again (`REINSTALL=1`) for the existing data |
 | `POOL_WORKERS` | pod CPU quota - 3 (min 4) | `--pool-workers` written into a new config (Strata would use the host's physical cores and be throttled by the pod's CPU quota); `0` = leave it to Strata |
 | `RESIDENT_BUDGET_GIB` | pod RAM - 24 | `unsloth` only: GiB of experts kept in RAM |
 | `STRATA_STORE`, `STRATA_LOCAL` | `<volume>/strata-store`, `/tmp` | store and local base; with the local base also the config paths change |

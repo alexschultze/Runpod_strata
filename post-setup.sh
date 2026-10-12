@@ -15,6 +15,7 @@ if [ "${POOL_WORKERS:-0}" -gt 0 ] && [ -f "$CFG" ] && command -v jq >/dev/null; 
         echo "post-setup.sh: --pool-workers $POOL_WORKERS written into the config"
     fi
 fi
+[ -n "${SHA:-}" ] && [ -f "$CFG" ] && echo "$SHA" > "$STRATA_DATA/config/.built-with"   # the Strata commit this config now belongs to
 if [ -n "$STRATA_STORE" ]; then
     mkdir -p "$STRATA_STORE/logs"
     ( ionice -c3 nice -n 19 /opt/runpod/publish.sh >> "$STRATA_STORE/logs/publish.log" 2>&1 & )
