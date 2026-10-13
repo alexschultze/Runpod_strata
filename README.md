@@ -109,13 +109,21 @@ Not covered: AMD Instinct MI300X (needs Strata's HIP build). Strata documents te
 - **Store (volume)**: see "How it works". The engine log is linked to `<store>/logs/`.
 - Moving to another pod/GPU: the key picks the matching archive or rebuilds; data is copied from the store.
 
+## Tests
+
+`tests/run.sh` runs `start.sh`, `post-setup.sh` and `publish.sh` against a fake Strata repo (no GPU, no download; needs root, it uses
+`/opt/runpod` and `/opt/strata`): key with the release tag, engine archive and restore, data copy, `COPY_DATA_LOCAL=no`, a new Strata
+version (`REINSTALL`), calibrated configs, `STRATA_API_KEY` and the `LOW_RAM` override. `tests/test_shim.py` tests the nvidia-smi shim.
+The workflow runs both before it builds; the image gets the tags `v0.1.<run>` and the commit SHA.
+
 ## Structure
 
 - `Dockerfile`, `entry.sh`, `start.sh`, `sshd.sh`, `post-setup.sh`, `publish.sh` - image and start logic
 - `serverless/` - `proxy.py` (`/ping`) and `handler.py` (queue endpoint)
 - `scripts/` - benchmarks, environment check, calibration, nvidia-smi shim; `strata/bench/bench.py` is `/app/bench/bench.py`
 - `strata/` - control tools: `runpod_ctl.py`, `build.sh`, README
-- `.github/workflows/dev.yml` - build in GitHub Actions
+- `.github/workflows/dev.yml` - tests, then build in GitHub Actions
+- `tests/` - tests of the start logic and the shim
 - `docs/` - context, plan, handoff
 
 ## Status

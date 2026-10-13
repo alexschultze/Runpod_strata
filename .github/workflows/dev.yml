@@ -11,7 +11,27 @@ env:
   DOCKER_PLATFORM: linux/amd64
 
 jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout this repo
+        uses: actions/checkout@v4
+
+      - name: Install test tools
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends rsync zstd jq
+
+      - name: Syntax check of all scripts
+        run: for f in *.sh scripts/*.sh tests/*.sh; do bash -n "$f" || exit 1; done
+
+      - name: Test the nvidia-smi shim
+        run: python3 tests/test_shim.py
+
+      # start.sh with a fake Strata repo: key, archive, restore, data copy, version change, hook, API key (no GPU, no download)
+      - name: Test start.sh
+        run: sudo bash tests/run.sh
+
   build-and-push:
+    needs: test
     runs-on: ubuntu-latest
     steps:
       - name: Checkout this repo
@@ -37,6 +57,8 @@ jobs:
           file: ./Dockerfile
           platforms: ${{ env.DOCKER_PLATFORM }}
           push: true
-          tags: ${{ env.DOCKER_IMAGE }}:v0.1.${{ github.run_number }}
+          tags: |
+            ${{ env.DOCKER_IMAGE }}:v0.1.${{ github.run_number }}
+            ${{ env.DOCKER_IMAGE }}:${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max

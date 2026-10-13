@@ -11,7 +11,7 @@
 #   FAMILY=qwen  MODEL=IQ2_XS  CONTEXT=32768     Strata's setup choices (see README); LOW_RAM only when you set it, else Strata decides
 #   STRATA_API_KEY required (alias API_KEY, Strata's own name): without it only sshd runs (ALLOW_NO_API_KEY=1 overrides, for tests that are not exposed)
 #   COPY_DATA_LOCAL=yes|no    copy the model data to the local disk (default yes, needs a big container disk) or use it on the volume
-#   STRATA_STORE   the volume's store, default <volume>/strata-store (volume: /runpod-volume, else /workspace if mounted)
+#   STRATA_STORE   the volume's store, default <volume>/strata-store (volume: /workspace if mounted, else /runpod-volume)
 #   STRATA_LOCAL   local base, default /tmp (Strata in <base>/Strata, data in <base>/Strata-data)
 #   STRATA_REF / STRATA_REPO   Strata to use: latest (default: newest release tag), a tag like v0.1.43.1, a branch, or HEAD; the tag is part of the key
 #   POOL_WORKERS   CPU expert workers written into a new config: default pod CPU quota minus 3 (min 4), 0 = leave Strata's choice
@@ -25,8 +25,10 @@ case "${COPY_DATA_LOCAL:-yes}" in [Yy]*|1|[Tt]rue) COPY_DATA_LOCAL=yes ;; *) COP
 export COPY_DATA_LOCAL
 
 # ---- where things are ----------------------------------------------------------------------------------------------------
-if [ -d /runpod-volume ]; then VOL=/runpod-volume
-elif grep -qs ' /workspace ' /proc/mounts; then VOL=/workspace
+# Our volume is /workspace (Pod). /runpod-volume is where Runpod mounts its own model store and Serverless volumes: only used when
+# /workspace is not a mount.
+if grep -qs ' /workspace ' /proc/mounts; then VOL=/workspace
+elif [ -d /runpod-volume ]; then VOL=/runpod-volume
 else VOL=""; fi
 STRATA_STORE="${STRATA_STORE:-${VOL:+$VOL/strata-store}}"
 STRATA_LOCAL="${STRATA_LOCAL:-/tmp}"
