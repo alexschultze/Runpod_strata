@@ -7,7 +7,7 @@ Details: `README.md`. Gemessen auf den Pods: Network Volume `geesefs` 8 MiB/s un
 - Ein Image (`strata-runpod`); die Engine wird auf dem Pod gebaut (3-4 min), als Archiv `app-<key>.tar` im Store abgelegt und bei
   gleichem Schluessel (GPU-Architektur, CPU-Flags, Strata-Commit) wiederhergestellt (ca. 0,5 GB).
 - `COPY_DATA_LOCAL=yes` (Standard): Daten werden vom Store nach `/tmp/Strata-data` kopiert, `no`: bleiben auf dem Volume.
-- Modell: `--family qwen --model IQ2_XS` (Strata-Empfehlung); `LOW_RAM=resident` bei begrenztem Pod-RAM; `STRATA_API_KEY` Pflicht (Alias `API_KEY`).
+- Modell: `--family qwen --model IQ2_XS` (Strata-Empfehlung); `LOW_RAM` wird nicht gesetzt (Strata entscheidet, wie bei der getesteten Konfiguration), `start.sh` warnt bei zu kleinem Pod-Limit; `STRATA_API_KEY` Pflicht (Alias `API_KEY`).
 - Pod-RAM und -CPU liest Strata falsch (Host-Werte): `POOL_WORKERS` aus `cpu.max`, `LOW_RAM` explizit.
 
 ## Naechste Schritte

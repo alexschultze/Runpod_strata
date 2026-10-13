@@ -31,7 +31,7 @@ Run it by hand, in tmux so it stays in the foreground:
 
 ```bash
 tmux new -s strata
-STRATA_API_KEY=<secret> MODEL=IQ2_XS LOW_RAM=resident /opt/runpod/start.sh
+STRATA_STRATA_API_KEY=<secret> MODEL=IQ2_XS /opt/runpod/start.sh
 ```
 
 ## Environment variables
@@ -41,7 +41,7 @@ STRATA_API_KEY=<secret> MODEL=IQ2_XS LOW_RAM=resident /opt/runpod/start.sh
 | `STRATA_API_KEY` | - (required) | API key for Strata (`API_KEY`, Strata's own name, works as an alias). Without it `start.sh` stops before Strata (Strata's rule: never expose the server without a key); sshd keeps running. Recorded in the config on the first start, later changes need `REINSTALL=1`. Use a Runpod Secret |
 | `FAMILY`, `MODEL` | `qwen`, `IQ2_XS` | Strata's setup choices. qwen: `Q2_0`, `IQ2_XS`, `IQ3_XXS`, `IQ3_S`; `coder`: `IQ1_M`; `unsloth`: `UD-IQ4_XS`, `UD-Q4_K_XL` |
 | `CONTEXT` | `32768` | context length |
-| `LOW_RAM` | `on` | `on`/`auto`: Strata chooses; `resident`: experts copied into RAM once at start (recommended with limited RAM); `mmap`: read from the data folder; `off`. Strata cannot see the pod's RAM limit (it reads the host's), so set `resident` or `mmap` explicitly when the limit is below experts + 10 GB. No effect for `unsloth` |
+| `LOW_RAM` | unset (Strata decides, `auto`) | only passed on when you set it: `auto`, `on`, `off`, `resident` (experts copied into RAM once at start), `mmap` (read from the data folder). Strata reads the host's RAM, not the pod's limit: `start.sh` warns when the limit is clearly below experts + ~12 GiB; then set `resident`. No effect for `unsloth` |
 | `COPY_DATA_LOCAL` | `yes` | copy model data from the store to `/tmp` (needs a big container disk), or use it on the volume |
 | `AUTO_START` | `no` | start Strata automatically (otherwise run `/opt/runpod/start.sh`) |
 | `STRATA_REF`, `STRATA_REPO` | `latest`, `Niko1221/Strata` | Strata to use: `latest` (newest release tag `v*`), a tag such as `v0.1.43.1` (pin), a branch or `HEAD` (key `head-<commit>`, rebuild on every upstream commit). A new version rebuilds the engine and runs Strata's setup again (`REINSTALL=1`) for the existing data |

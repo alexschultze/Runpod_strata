@@ -8,7 +8,7 @@
 #   3. Strata starts from /tmp (MODE pod | lb | queue).
 #
 # Environment variables (defaults):
-#   FAMILY=qwen  MODEL=IQ2_XS  CONTEXT=32768  LOW_RAM=on     Strata's setup choices (see README)
+#   FAMILY=qwen  MODEL=IQ2_XS  CONTEXT=32768     Strata's setup choices (see README); LOW_RAM only when you set it, else Strata decides
 #   STRATA_API_KEY required (alias API_KEY, Strata's own name): without it only sshd runs (ALLOW_NO_API_KEY=1 overrides, for tests that are not exposed)
 #   COPY_DATA_LOCAL=yes|no    copy the model data to the local disk (default yes, needs a big container disk) or use it on the volume
 #   STRATA_STORE   the volume's store, default <volume>/strata-store (volume: /runpod-volume, else /workspace if mounted)
@@ -20,7 +20,7 @@
 # Further Strata variables (KV, GPU, GPUS, PORT, VISION, REINSTALL, ...) pass through to Strata's docker-entrypoint.sh.
 set -e
 MODE="${MODE:-pod}"
-export MODEL="${MODEL:-IQ2_XS}" FAMILY="${FAMILY:-qwen}" CONTEXT="${CONTEXT:-32768}" LOW_RAM="${LOW_RAM:-on}"
+export MODEL="${MODEL:-IQ2_XS}" FAMILY="${FAMILY:-qwen}" CONTEXT="${CONTEXT:-32768}"   # LOW_RAM is not set here: Strata decides (auto)
 case "${COPY_DATA_LOCAL:-yes}" in [Yy]*|1|[Tt]rue) COPY_DATA_LOCAL=yes ;; *) COPY_DATA_LOCAL=no ;; esac
 export COPY_DATA_LOCAL
 
@@ -66,9 +66,17 @@ if [ -z "${POOL_WORKERS:-}" ]; then
 fi
 export POOL_WORKERS
 
+# Strata decides about the low-RAM mode from the host's RAM, not the pod's limit: say so when the limit is clearly too small for the experts
+case "$MODEL" in Q2_0) ARENA=34 ;; IQ2_XS) ARENA=36 ;; IQ3_XXS) ARENA=43 ;; IQ3_S) ARENA=51 ;; IQ1_M) ARENA=24 ;; *) ARENA=0 ;; esac
+if [ "$FAMILY" != unsloth ] && [ "$ARENA" -gt 0 ] && { [ -z "${LOW_RAM:-}" ] || [ "$LOW_RAM" = auto ] || [ "$LOW_RAM" = off ]; }; then
+    POD_GIB=$(mem_gib)
+    if [ "$POD_GIB" -lt $((ARENA + 12)) ]; then
+        echo "start.sh: WARNING: the pod's RAM limit is ${POD_GIB} GiB, $MODEL keeps about $ARENA GiB of experts in RAM plus ~12 GiB for the rest. Strata reads the host's RAM and will not notice: set LOW_RAM=resident (or mmap), or pick a smaller MODEL." >&2
+    fi
+fi
 case "$FAMILY" in qwen) prefix="" ;; *) prefix="${FAMILY}-" ;; esac
 TAG="${prefix}$(printf '%s' "$MODEL" | tr 'A-Z' 'a-z')"; export TAG
-echo "start.sh: MODE=$MODE FAMILY=$FAMILY MODEL=$MODEL CONTEXT=$CONTEXT LOW_RAM=$LOW_RAM COPY_DATA_LOCAL=$COPY_DATA_LOCAL STORE=${STRATA_STORE:--} DATA=$STRATA_DATA"
+echo "start.sh: MODE=$MODE FAMILY=$FAMILY MODEL=$MODEL CONTEXT=$CONTEXT LOW_RAM=${LOW_RAM:-(Strata decides)} COPY_DATA_LOCAL=$COPY_DATA_LOCAL STORE=${STRATA_STORE:--} DATA=$STRATA_DATA"
 
 [ -x /opt/runpod/sshd.sh ] && /opt/runpod/sshd.sh
 
