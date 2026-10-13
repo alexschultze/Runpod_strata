@@ -10,7 +10,7 @@ RUN apt-get update --yes && \
     apt-get install --yes --no-install-recommends \
     build-essential ca-certificates curl git libatomic1 libgomp1 \
     python3 python3-pip python3-venv unzip \
-    openssh-server rsync fio jq tmux htop nano \
+    openssh-server rsync zstd fio jq tmux htop nano \
     && rm -rf /var/lib/apt/lists/*
 
 COPY serverless/proxy.py serverless/handler.py /opt/runpod/

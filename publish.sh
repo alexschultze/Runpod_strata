@@ -5,17 +5,17 @@ command -v rsync >/dev/null || { echo "publish: rsync is not installed"; exit 1;
 exec 8>"$STRATA_STORE/.publish.lock"
 flock -n 8 || { echo "$(date +%T) publish: another publish is running"; exit 0; }
 echo "$(date +%T) publish: key $KEY"
-ARCHIVE="$STRATA_STORE/app-$KEY.tar"
+ARCHIVE="$STRATA_STORE/app-$KEY.tar.zst"
 if [ ! -f "$ARCHIVE" ] && [ -f "$STRATA_HOME/engine/BUILD.json" ]; then
-    # without the build folders; the Python environment and the engine are what a restore needs
+    # without the build folders; the Python environment and the engine are what a restore needs; compressed (zstd, all cores of the pod quota)
     tar -C "$(dirname "$STRATA_HOME")" --exclude="$(basename "$STRATA_HOME")/build" --exclude="$(basename "$STRATA_HOME")/build-vision" \
-        -cf "$ARCHIVE.tmp" "$(basename "$STRATA_HOME")" && mv "$ARCHIVE.tmp" "$ARCHIVE" && echo "$(date +%T) publish: archive $(du -h "$ARCHIVE" | cut -f1)"
+        -I "zstd -T0 -3" -cf "$ARCHIVE.tmp" "$(basename "$STRATA_HOME")" && mv "$ARCHIVE.tmp" "$ARCHIVE" && echo "$(date +%T) publish: archive $(du -h "$ARCHIVE" | cut -f1)"
     # what is in the archive, for humans (version from CMakeLists, tag/label, commit)
     jq -n --arg v "${STRATA_VERSION:-}" --arg l "${LABEL:-}" --arg c "${SHA:-}" --arg a "${ARCH:-}" --arg i "${ISA:-}" --arg d "$(date -u +%FT%TZ)" \
         '{strata_version: $v, strata_label: $l, strata_commit: $c, gpu_arch: $a, cpu_isa: $i, built: $d}' > "$STRATA_STORE/app-$KEY.json" 2>/dev/null
     # keep the newest 3 archives per GPU architecture and CPU (Strata releases often, old ones pile up at ~0.5 GB each)
-    ls -t "$STRATA_STORE"/app-sm"$ARCH"-"$ISA"-*.tar 2>/dev/null | tail -n +4 | while read -r old; do
-        rm -f "$old" "${old%.tar}.json" && echo "$(date +%T) publish: removed old archive $(basename "$old")"
+    ls -t "$STRATA_STORE"/app-sm"$ARCH"-"$ISA"-*.tar.zst 2>/dev/null | tail -n +4 | while read -r old; do
+        rm -f "$old" "${old%.tar.zst}.json" && echo "$(date +%T) publish: removed old archive $(basename "$old")"
     done
 fi
 rc=0

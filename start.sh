@@ -1,7 +1,7 @@
 #!/bin/bash
 # Starts Strata. Engine and data are installed and run under /tmp (local disk, fast); the network volume only stores them.
 #
-#   1. Engine: restored from the volume (strata-store/app-<key>.tar) when an archive for this GPU, CPU and Strata commit exists,
+#   1. Engine: restored from the volume (strata-store/app-<key>.tar.zst) when an archive for this GPU, CPU and Strata commit exists,
 #      else cloned from GitHub and built by Strata's setup.py, then archived to the volume (post-setup.sh).
 #   2. Data (models, packs, mtp, config): COPY_DATA_LOCAL=yes (default) copies them from the volume to /tmp/Strata-data once per
 #      pod, no: they stay on the volume and /tmp/Strata-data links to them. A first setup downloads into /tmp and pushes to the volume.
@@ -98,13 +98,13 @@ if [ -n "$SHA" ]; then
     if git ls-remote --tags --refs "$STRATA_REPO" "refs/tags/$REF" 2>/dev/null | grep -q .; then LABEL="$REF"
     else LABEL="$(printf '%s' "$REF" | tr 'A-Z/' 'a-z-')-$SHA"; fi
 elif [ -n "$STRATA_STORE" ]; then   # GitHub not reachable: take the newest archive for this GPU and CPU
-    last=$(ls -t "$STRATA_STORE"/app-sm"$ARCH"-"$ISA"-*.tar 2>/dev/null | head -1)
-    [ -n "$last" ] && LABEL=$(basename "$last" .tar | sed "s/^app-sm$ARCH-$ISA-//") && echo "start.sh: GitHub not reachable, using the newest archive ($LABEL)"
+    last=$(ls -t "$STRATA_STORE"/app-sm"$ARCH"-"$ISA"-*.tar.zst 2>/dev/null | head -1)
+    [ -n "$last" ] && LABEL=$(basename "$last" .tar.zst | sed "s/^app-sm$ARCH-$ISA-//") && echo "start.sh: GitHub not reachable, using the newest archive ($LABEL)"
 fi
 [ -n "${LATEST_FAILED:-}" ] && echo "start.sh: no release tag found, using HEAD" >&2
 CLONE_REF=""; [ "$REF" != HEAD ] && CLONE_REF="$REF"
 export ARCH ISA SHA LABEL KEY="sm${ARCH}-${ISA}-${LABEL:-unknown}"
-ARCHIVE="${STRATA_STORE:+$STRATA_STORE/app-$KEY.tar}"
+ARCHIVE="${STRATA_STORE:+$STRATA_STORE/app-$KEY.tar.zst}"   # zstd: the Strata folder is thousands of small files
 echo "start.sh: engine key $KEY"
 
 # ready = the Python environment and the engine are there AND they belong to this key (GPU architecture, CPU, Strata commit)
@@ -113,7 +113,7 @@ if ! app_ready; then
     if [ -n "$ARCHIVE" ] && [ -f "$ARCHIVE" ]; then
         echo "start.sh: restoring the engine from $ARCHIVE"
         rm -rf "${STRATA_HOME:?}"
-        tar -xf "$ARCHIVE" -C "$STRATA_LOCAL"
+        tar -I zstd -xf "$ARCHIVE" -C "$STRATA_LOCAL"
     fi
 fi
 if ! app_ready; then   # no archive for this key: clone and prepare the Python environment; setup.py builds the engine below

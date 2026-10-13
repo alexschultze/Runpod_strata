@@ -10,7 +10,7 @@ The network volume is slow for small files and random reads (measured: geesefs 8
 and data are installed and run under `/tmp`** (local disk); the volume is only the store.
 
 `start.sh` does, in this order:
-1. **Engine.** Computes a key `sm<GPU arch>-<CPU flags hash>-<Strata tag>` (for example `sm86-aeb253d3-v0.1.43.1`; for a branch or HEAD `sm86-aeb253d3-head-<commit>`). If `<store>/app-<key>.tar` exists it is unpacked to
+1. **Engine.** Computes a key `sm<GPU arch>-<CPU flags hash>-<Strata tag>` (for example `sm86-aeb253d3-v0.1.43.1`; for a branch or HEAD `sm86-aeb253d3-head-<commit>`). If `<store>/app-<key>.tar.zst` exists it is unpacked to
    `/tmp/Strata` (about 0.5 GB). Otherwise it clones Strata, creates the Python environment, and Strata's `setup.py` builds the engine
    (3-4 minutes measured on a 128-core host; longer with fewer CPUs).
 2. **Data** (`models/`, `packs/` with `experts.bin`, `mtp/`, `config/`) in `/tmp/Strata-data`:
@@ -22,7 +22,7 @@ and data are installed and run under `/tmp`** (local disk); the volume is only t
 4. **Start** Strata from `/tmp` (`MODE` pod | lb | queue).
 
 The store is `<volume>/strata-store` (volume: `/runpod-volume`, else `/workspace` if a volume is mounted there):
-`app-<key>.tar`, `data/` (mirror of `/tmp/Strata-data`, `data/.complete` marks a finished push), `logs/`, `xdg/` (Strata's `settings.json`
+`app-<key>.tar.zst` (zstd-compressed, the Strata folder is thousands of small files), `data/` (mirror of `/tmp/Strata-data`, `data/.complete` marks a finished push), `logs/`, `xdg/` (Strata's `settings.json`
 incl. calibrations). A different CPU, GPU architecture or Strata version gives a different key and a rebuild; `app-<key>.json` next to the archive names version, tag and commit; the newest 3 archives per GPU and CPU are kept (the engine is compiled for
 the CPU's instruction sets and the GPU architecture it was built on).
 
