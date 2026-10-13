@@ -49,7 +49,8 @@ API_KEY=<secret> MODEL=IQ2_XS LOW_RAM=resident /opt/runpod/start.sh
 | `RESIDENT_BUDGET_GIB` | pod RAM - 24 | `unsloth` only: GiB of experts kept in RAM |
 | `STRATA_STORE`, `STRATA_LOCAL` | `<volume>/strata-store`, `/tmp` | store and local base; with the local base also the config paths change |
 | `MODE`, `PORT`, `KV`, `GPU`, `GPUS`, `VISION`, `REINSTALL`, ... | Strata defaults | passed on to Strata's `docker-entrypoint.sh`; see the header of Strata's `Dockerfile` |
-| `PUBLIC_KEY` | set by Runpod | sshd starts with this key |
+| `PUBLIC_KEY` | set by Runpod | sshd starts with this key (key login only, no password) |
+| `SSH_PUBLIC_KEY` | - | your public key line, used when Runpod does not pass `PUBLIC_KEY` (seen on a pod: the `ssh.runpod.io` proxy worked, the direct TCP login failed). A public key is no secret |
 
 ## Pod template in the console
 
