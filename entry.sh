@@ -5,7 +5,7 @@
 if [ "${AUTO_START:-no}" = yes ] || [ "${MODE:-pod}" != pod ]; then exec /opt/runpod/start.sh; fi
 cat <<MSG
 entry.sh: nothing is started (AUTO_START is not yes). To install/restore and start Strata run, inside tmux:
-  API_KEY=<secret> /opt/runpod/start.sh
+  STRATA_API_KEY=<secret> /opt/runpod/start.sh
   (variables: FAMILY, MODEL, CONTEXT, LOW_RAM, COPY_DATA_LOCAL, ...; see the README)
 MSG
 exec sleep infinity

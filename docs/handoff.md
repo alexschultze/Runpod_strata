@@ -14,7 +14,7 @@ Regeln: kleine Commits, vor jedem Push `git pull --rebase`. Keine Secrets, Keys 
 ## Stand
 
 - Ein Image: `ghcr.io/alexschultze/strata-runpod:v0.1.<run>` (Workflow `dev.yml`). Engine und Daten laufen unter `/tmp`, das Volume
-  ist die Ablage (`<volume>/strata-store`). Start per Hand: `API_KEY=... /opt/runpod/start.sh` in tmux (`AUTO_START=yes` startet automatisch).
+  ist die Ablage (`<volume>/strata-store`). Start per Hand: `STRATA_API_KEY=... /opt/runpod/start.sh` in tmux (`AUTO_START=yes` startet automatisch).
 - Noch nicht auf einem GPU-Pod mit dem echten Strata getestet (nur in einer Sandbox mit einem nachgebauten Strata).
 
 ## Pruefliste fuer den lokalen Claude (im Pod)

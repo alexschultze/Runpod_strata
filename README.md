@@ -31,14 +31,14 @@ Run it by hand, in tmux so it stays in the foreground:
 
 ```bash
 tmux new -s strata
-API_KEY=<secret> MODEL=IQ2_XS LOW_RAM=resident /opt/runpod/start.sh
+STRATA_API_KEY=<secret> MODEL=IQ2_XS LOW_RAM=resident /opt/runpod/start.sh
 ```
 
 ## Environment variables
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `API_KEY` | - (required) | API key for Strata. Without it `start.sh` stops before Strata (Strata's rule: never expose the server without a key); sshd keeps running. Recorded in the config on the first start, later changes need `REINSTALL=1`. Use a Runpod Secret |
+| `STRATA_API_KEY` | - (required) | API key for Strata (`API_KEY`, Strata's own name, works as an alias). Without it `start.sh` stops before Strata (Strata's rule: never expose the server without a key); sshd keeps running. Recorded in the config on the first start, later changes need `REINSTALL=1`. Use a Runpod Secret |
 | `FAMILY`, `MODEL` | `qwen`, `IQ2_XS` | Strata's setup choices. qwen: `Q2_0`, `IQ2_XS`, `IQ3_XXS`, `IQ3_S`; `coder`: `IQ1_M`; `unsloth`: `UD-IQ4_XS`, `UD-Q4_K_XL` |
 | `CONTEXT` | `32768` | context length |
 | `LOW_RAM` | `on` | `on`/`auto`: Strata chooses; `resident`: experts copied into RAM once at start (recommended with limited RAM); `mmap`: read from the data folder; `off`. Strata cannot see the pod's RAM limit (it reads the host's), so set `resident` or `mmap` explicitly when the limit is below experts + 10 GB. No effect for `unsloth` |

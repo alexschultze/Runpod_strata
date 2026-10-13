@@ -9,7 +9,7 @@
 #
 # Environment variables (defaults):
 #   FAMILY=qwen  MODEL=IQ2_XS  CONTEXT=32768  LOW_RAM=on     Strata's setup choices (see README)
-#   API_KEY        required: without it only sshd runs (ALLOW_NO_API_KEY=1 overrides, for tests that are not exposed)
+#   STRATA_API_KEY required (alias API_KEY, Strata's own name): without it only sshd runs (ALLOW_NO_API_KEY=1 overrides, for tests that are not exposed)
 #   COPY_DATA_LOCAL=yes|no    copy the model data to the local disk (default yes, needs a big container disk) or use it on the volume
 #   STRATA_STORE   the volume's store, default <volume>/strata-store (volume: /runpod-volume, else /workspace if mounted)
 #   STRATA_LOCAL   local base, default /tmp (Strata in <base>/Strata, data in <base>/Strata-data)
@@ -75,8 +75,9 @@ echo "start.sh: MODE=$MODE FAMILY=$FAMILY MODEL=$MODEL CONTEXT=$CONTEXT LOW_RAM=
 # AI_SETUP.md rule: never expose Strata without an API key (the Runpod proxy makes port 8080 reachable from the internet).
 # The key is recorded in the model's config on the first start (REINSTALL=1 changes it later), so it is not generated here.
 # Without a key only sshd runs, so you can still log in and debug.
+API_KEY="${STRATA_API_KEY:-${API_KEY:-}}"; export API_KEY      # Strata's entrypoint and the queue handler read API_KEY
 if [ -z "${API_KEY:-}" ] && [ "${ALLOW_NO_API_KEY:-0}" != 1 ]; then
-    echo "start.sh: API_KEY is not set. Strata is NOT started (set API_KEY, or ALLOW_NO_API_KEY=1 for a test without exposure)." >&2
+    echo "start.sh: STRATA_API_KEY (or API_KEY) is not set. Strata is NOT started (set it, or ALLOW_NO_API_KEY=1 for a test without exposure)." >&2
     exec sleep infinity
 fi
 fail_alive() { echo "start.sh: $*" >&2; exec sleep infinity; }   # keeps the pod (and sshd) up so you can look around
