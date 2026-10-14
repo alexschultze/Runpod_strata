@@ -1,0 +1,67 @@
+name: Build worker-ollama with OpenAI route fix
+
+# Builds runpod-workers/worker-ollama at the commit the patch is based on, with
+# upstream-patches/worker-ollama-openai-route.patch applied. For testing the fix
+# on a Runpod endpoint before it is merged upstream.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  UPSTREAM_REF: 1848765
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout this repo (for the patch)
+        uses: actions/checkout@v4
+        with:
+          path: strata
+
+      - name: Checkout upstream worker-ollama
+        uses: actions/checkout@v4
+        with:
+          repository: runpod-workers/worker-ollama
+          ref: ${{ env.UPSTREAM_REF }}
+          path: worker
+
+      - name: Apply the patch
+        working-directory: worker
+        run: git apply --index ../strata/upstream-patches/worker-ollama-openai-route.patch
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Unit tests
+        working-directory: worker
+        run: |
+          pip install -r requirements.txt pytest
+          python -m pytest test_selection.py test_warmup.py test_openai.py -v
+
+      - name: Set image name (GHCR needs lowercase)
+        run: echo "DOCKER_IMAGE=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/worker-ollama-openai" >> "$GITHUB_ENV"
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: worker
+          push: true
+          platforms: linux/amd64
+          tags: |
+            ${{ env.DOCKER_IMAGE }}:latest
+            ${{ env.DOCKER_IMAGE }}:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
