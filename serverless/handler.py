@@ -7,6 +7,9 @@ Accepted job inputs:
   our own format (/run, /runsync):
     {"path": "/v1/chat/completions", "body": {...}}   (path optional); "stream": true yields the parsed chunks
     {"prompt": "Hello World"} (RunPod's default example) is sent as one user message, if there are no "messages"
+    {"path": "/api_direct"} -> {"url": "https://<worker id>-8080.proxy.runpod.net/", ...}: where the Strata website of THIS worker is. "hold": N
+      keeps the job (and so the worker, which RunPod would stop after its idle timeout) open for N seconds (at most HOLD_MAX, default 3600);
+      use /run and read the url from /stream/<id>, /runsync would wait for the whole time. The job takes one of the worker's slots meanwhile.
 Only /v1/* is forwarded. The worker takes no jobs before Strata reports loaded (/health), so the queue only gets a worker that can answer."""
 import codecs
 import json
@@ -67,8 +70,29 @@ def parse(inp):
     return path, "POST", body, False
 
 
+def direct(inp):
+    """The worker's own proxy URL (the website, API on the same host) and optionally hold the job open so the worker stays up."""
+    wid = os.environ.get("RUNPOD_POD_ID")
+    if not wid:
+        yield error("RUNPOD_POD_ID is not set: this worker does not know its own proxy URL")
+        return
+    try:
+        hold = max(0, min(int(inp.get("hold") or 0), int(os.environ.get("HOLD_MAX", "3600"))))
+    except (TypeError, ValueError):
+        hold = 0
+    port = BASE.rsplit(":", 1)[1]
+    yield {"url": "https://%s-%s.proxy.runpod.net/" % (wid, port), "worker_id": wid, "hold_seconds": hold}
+    end = time.time() + hold
+    while time.time() < end:
+        time.sleep(min(5, max(0.0, end - time.time())))
+
+
 def handler(job):
-    path, method, body, raw = parse(job.get("input") or {})
+    inp = job.get("input") or {}
+    if inp.get("path") == "/api_direct":
+        yield from direct(inp)
+        return
+    path, method, body, raw = parse(inp)
     if not isinstance(path, str) or not path.startswith("/v1/"):
         yield error("only /v1/* is allowed", "invalid_request")
         return

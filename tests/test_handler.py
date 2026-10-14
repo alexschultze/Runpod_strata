@@ -82,6 +82,16 @@ check("HTTP error -> error object", out[0]["error"]["type"] == "worker_error" an
 out = run({"openai_route": "/admin", "openai_input": {}})
 check("paths outside /v1/ are refused", out[0]["error"]["type"] == "invalid_request")
 check("the Strata key is sent on /v1 requests", all(a == "Bearer secret" for _, p, a in Fake.seen if p.startswith("/v1/")))
+os.environ.pop("RUNPOD_POD_ID", None)
+out = run({"path": "/api_direct"})
+check("/api_direct without RUNPOD_POD_ID: error", out[0].get("error", {}).get("type") == "worker_error")
+os.environ["RUNPOD_POD_ID"] = "abc123"
+out = run({"path": "/api_direct"})
+check("/api_direct: the worker's URL, no hold", out == [{"url": "https://abc123-%s.proxy.runpod.net/" % os.environ["STRATA_PORT"], "worker_id": "abc123", "hold_seconds": 0}])
+t0 = time.time(); out = run({"path": "/api_direct", "hold": 2})
+check("/api_direct with hold keeps the job open for that long", time.time() - t0 >= 1.9 and out[0]["hold_seconds"] == 2)
+os.environ["HOLD_MAX"] = "1"; t0 = time.time(); out = run({"path": "/api_direct", "hold": 99})
+check("hold is capped by HOLD_MAX", out[0]["hold_seconds"] == 1 and time.time() - t0 < 3)
 check("slots: 1 without a report and without STRATA_PARALLEL", h.serving_slots() == 1)
 os.environ["STRATA_PARALLEL"] = "4"
 check("slots: STRATA_PARALLEL when Strata reports nothing", h.serving_slots() == 4)
