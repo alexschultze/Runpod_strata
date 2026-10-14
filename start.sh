@@ -19,6 +19,8 @@
 #   RESIDENT_BUDGET_GIB  unsloth only: GiB of experts kept in RAM, default pod RAM (cgroup limit) minus 24
 # Further Strata variables (KV, GPU, GPUS, PORT, VISION, REINSTALL, ...) pass through to Strata's docker-entrypoint.sh.
 set -e
+# a Serverless worker without an explicit MODE is queue-based (RunPod sets RUNPOD_ENDPOINT_ID there): without the handler the queue is never processed
+if [ -z "${MODE:-}" ] && [ -n "${RUNPOD_ENDPOINT_ID:-}" ]; then MODE=queue; echo "start.sh: Serverless worker (RUNPOD_ENDPOINT_ID set), MODE=queue (set MODE=lb for a load-balancing endpoint)"; fi
 MODE="${MODE:-pod}"
 export MODEL="${MODEL:-IQ2_XS}" FAMILY="${FAMILY:-qwen}" CONTEXT="${CONTEXT:-32768}"   # LOW_RAM is not set here: Strata decides (auto)
 case "${COPY_DATA_LOCAL:-yes}" in [Yy]*|1|[Tt]rue) COPY_DATA_LOCAL=yes ;; *) COPY_DATA_LOCAL=no ;; esac
@@ -80,6 +82,7 @@ if [ "$FAMILY" != unsloth ] && [ "$ARENA" -gt 0 ] && { [ -z "${LOW_RAM:-}" ] || 
 fi
 case "$FAMILY" in qwen) prefix="" ;; *) prefix="${FAMILY}-" ;; esac
 TAG="${prefix}$(printf '%s' "$MODEL" | tr 'A-Z' 'a-z')"; export TAG
+[ -n "${RUNPOD_POD_ID:-}" ] && echo "start.sh: URL of this $([ -n "${RUNPOD_ENDPOINT_ID:-}" ] && echo worker || echo pod) (HTTP port 8080): https://${RUNPOD_POD_ID}-8080.proxy.runpod.net/"
 echo "start.sh: MODE=$MODE FAMILY=$FAMILY MODEL=$MODEL CONTEXT=$CONTEXT LOW_RAM=${LOW_RAM:-(Strata decides)} COPY_DATA_LOCAL=$COPY_DATA_LOCAL STORE=${STRATA_STORE:--} DATA=$STRATA_DATA"
 
 [ -x /opt/runpod/sshd.sh ] && /opt/runpod/sshd.sh

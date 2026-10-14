@@ -25,6 +25,8 @@ jobs:
 
       - name: Test the nvidia-smi shim
         run: python3 tests/test_shim.py
+      - name: Queue handler tests
+        run: pip install requests && python3 tests/test_handler.py
 
       # start.sh with a fake Strata repo: key, archive, restore, data copy, version change, hook, API key (no GPU, no download)
       - name: Test start.sh

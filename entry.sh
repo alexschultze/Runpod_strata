@@ -3,6 +3,7 @@
 #   SCRIPTS_REF=<branch|tag>   use the scripts of that git ref instead of the ones in the image (see update-scripts.sh)
 #   AUTO_START=yes   start Strata automatically (always for MODE=lb or queue). Default: wait, you run /opt/runpod/start.sh yourself (in tmux).
 /opt/runpod/sshd.sh
+[ -z "${MODE:-}" ] && [ -n "${RUNPOD_ENDPOINT_ID:-}" ] && export MODE=queue   # Serverless worker: start (and queue handler) automatically
 /opt/runpod/update-scripts.sh   # only with SCRIPTS_REF set: current scripts from the git repo instead of the image's
 if [ "${AUTO_START:-no}" = yes ] || [ "${MODE:-pod}" != pod ]; then exec /opt/runpod/start.sh; fi
 cat <<MSG
