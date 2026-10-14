@@ -83,7 +83,6 @@ if [ "$FAMILY" != unsloth ] && [ "$ARENA" -gt 0 ] && { [ -z "${LOW_RAM:-}" ] || 
 fi
 case "$FAMILY" in qwen) prefix="" ;; *) prefix="${FAMILY}-" ;; esac
 TAG="${prefix}$(printf '%s' "$MODEL" | tr 'A-Z' 'a-z')"; export TAG
-[ -n "${RUNPOD_POD_ID:-}" ] && echo "start.sh: URL of this $([ -n "${RUNPOD_ENDPOINT_ID:-}" ] && echo worker || echo pod) (HTTP port 8080): https://${RUNPOD_POD_ID}-8080.proxy.runpod.net/"
 echo "start.sh: MODE=$MODE FAMILY=$FAMILY MODEL=$MODEL CONTEXT=$CONTEXT LOW_RAM=${LOW_RAM:-(Strata decides)} COPY_DATA_LOCAL=$COPY_DATA_LOCAL STORE=${STRATA_STORE:--} DATA=$STRATA_DATA"
 
 [ -x /opt/runpod/sshd.sh ] && /opt/runpod/sshd.sh
