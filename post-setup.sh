@@ -1,9 +1,9 @@
 #!/bin/bash
 # Called by Strata's docker-entrypoint.sh (patched by start.sh) after the setup and before the server starts, on every start.
 # 0. calibration, per hardware (GPU, CPU, model, context): a result is kept as <store>/tuned/<key>.args and applied on every start of the same hardware.
-#      STRATA_CALIBRATE=no (default)  never calibrates; a saved result for this hardware is applied
+#      STRATA_CALIBRATE=no (default)  never calibrates: the saved result for this hardware is applied, else Strata's defaults
 #      STRATA_CALIBRATE=yes           applies the saved result, calibrates (15-30 min) first when there is none for this hardware
-#      STRATA_CALIBRATE=force         always calibrates
+#      STRATA_CALIBRATE=force         calibrates (and so writes the result file, also when none exists yet) and applies it
 #    STRATA_PARALLEL=N (batch slots) and STRATA_ENGINE_ARGS (e.g. "--pcie-frac 1.00") are manual overrides, merged on top on every start
 # 1. writes --pool-workers into the model's config unless it has one or has been calibrated (a calibration measured the workers itself)
 # 2. in the background: archives the engine and pushes the data to the volume, once
@@ -44,8 +44,10 @@ if [ -f "$TUNED_FILE" ]; then
     TA=$(grep -v '^#' "$TUNED_FILE" | tr '\n' ' ')
     merge_args "$TA" "$CALIB"   # the saved result replaces every calibrated flag (a config calibrated elsewhere keeps none of them)
     echo "post-setup.sh: calibration for this hardware applied from $TUNED_FILE: ${TA:-(the defaults won)}"
-elif [ "${STRATA_CALIBRATE:-no}" != no ]; then
-    echo "post-setup.sh: no calibration for this hardware (calibration failed?), the config is used as it is"
+else
+    # no result for this hardware: Strata's defaults, not the values a calibration on other hardware left in the config
+    merge_args "" "$CALIB"
+    echo "post-setup.sh: no calibration for this hardware: Strata's defaults (STRATA_CALIBRATE=yes calibrates, ${TUNED_FILE##*/} is looked up in ${TUNED_FILE%/*})"
 fi
 
 # STRATA_PARALLEL=N: N requests decoded together (Strata's batch slots, --batch N). Unset: the config stays as it is (Strata's default: one at a time).

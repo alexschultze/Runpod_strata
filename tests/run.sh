@@ -110,6 +110,9 @@ cfgs=$(ls "$T"/local/Strata-data/config/strata-*.json)
 for f in $cfgs; do jq '.args=["--pcie-frac","1.00","--pool-workers","9"]' "$f" > "$f.t" && cat "$f.t" > "$f"; rm -f "$f.t"; done
 run env $CAL FAKE_GPU="Fake GPU 24G"; settle
 expect_no "values calibrated on other hardware are replaced" '"--pool-workers","9"'
+for f in $cfgs; do jq '.args=["--pcie-frac","1.00","--pool-workers","9"]' "$f" > "$f.t" && cat "$f.t" > "$f"; rm -f "$f.t"; done
+run env $CAL FAKE_GPU="Unknown GPU"; settle
+expect_no "no result for this hardware (STRATA_CALIBRATE=no): Strata's defaults, other hardware's values dropped" '"--pcie-frac"'
 
 echo "8. STRATA_PARALLEL: N sets --batch N, 1 removes it"
 fresh_pod; run env STRATA_PARALLEL=3; settle
