@@ -5,9 +5,8 @@
 # Documentation
 docs/
 *.md
-README.md
 
-# Strata deployment files (separate from this template image)
+# control tools of the repo (only the benchmark client is part of the image)
 strata/*
 !strata/bench
 .github/

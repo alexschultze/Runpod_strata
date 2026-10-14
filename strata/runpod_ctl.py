@@ -15,7 +15,7 @@ import argparse, json, os, sys, urllib.request, urllib.error
 
 API = "https://rest.runpod.io/v1"
 STATE = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".runpod_state.json")
-DEFAULT_GPU = "NVIDIA H100 80GB HBM3"  # H100 braucht das Image mit sm_90 (build.sh)
+DEFAULT_GPU = "NVIDIA H100 80GB HBM3"  # the engine is built on the pod for whatever GPU it gets (once per GPU architecture)
 
 
 def call(method, path, body=None):
@@ -81,7 +81,7 @@ def ep(a):
     if a.cmd == "create":
         t = call("POST", "/templates", {
             "name": "strata-queue", "imageName": a.image, "isServerless": True,
-            "containerDiskInGb": 40, "env": env_for(a, "queue")})
+            "containerDiskInGb": a.container_gb, "env": env_for(a, "queue")})
         body = {"name": "strata-queue", "templateId": t["id"], "gpuTypeIds": [a.gpu],
                 "workersMin": 0, "workersMax": 1, "idleTimeout": a.idle, "scalerType": "QUEUE_DELAY",
                 "scalerValue": 4, "executionTimeoutMs": 600000, "flashboot": False,
@@ -117,7 +117,7 @@ def main():
     ap.add_argument("--family", default="qwen"); ap.add_argument("--low-ram", default=None, choices=["auto", "on", "off", "resident", "mmap"], help="LOW_RAM; ohne Angabe entscheidet Strata")
     ap.add_argument("--env", action="append", default=[], metavar="KEY=VALUE", help="weitere Umgebungsvariable (wiederholbar)")
     ap.add_argument("--volume-gb", type=int, default=150)
-    ap.add_argument("--container-gb", type=int, default=150, help="Container-Disk: Engine und Modelldaten liegen lokal unter /tmp (COPY_DATA_LOCAL=yes)")
+    ap.add_argument("--container-gb", type=int, default=85, help="Container-Disk: Engine und Modelldaten liegen lokal unter /tmp (COPY_DATA_LOCAL=yes)")
     ap.add_argument("--min-ram", type=int, default=48, help="mindestens GB RAM pro GPU (Pod-Limit, nicht Host-RAM)")
     ap.add_argument("--network-volume"); ap.add_argument("--idle", type=int, default=60)
     sub = ap.add_subparsers(dest="kind", required=True)

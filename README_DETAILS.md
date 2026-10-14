@@ -1,7 +1,7 @@
 # Strata on Runpod
 
 Runpod image for [Strata](https://github.com/Niko1221/Strata) (OpenAI-/Anthropic-compatible LLM server, API on :8080, `/health`).
-Layout follows [runpod-workers/pod-template](https://github.com/runpod-workers/pod-template). Plan: [`docs/plan.md`](docs/plan.md).
+Layout follows [runpod-workers/pod-template](https://github.com/runpod-workers/pod-template).
 
 ## How it works
 
@@ -151,10 +151,10 @@ a config without engine, the API key, calibration per hardware (`STRATA_CALIBRAT
 - `Dockerfile`, `entry.sh`, `start.sh`, `sshd.sh`, `hwinfo.sh`, `post-setup.sh`, `publish.sh`, `update-scripts.sh`, `volume-check.sh` - image and start logic
 - `serverless/` - `proxy.py` (`/ping`, load balancer) and `handler.py` (queue endpoint, OpenAI route, `/api_direct`)
 - `scripts/` - benchmarks (`bench-local.sh`, `bench-parallel.sh`), storage tests, environment check, calibration, nvidia-smi shim; `strata/bench/` is `/app/bench/`
-- `strata/` - control tools: `runpod_ctl.py`, `build.sh`, README
+- `strata/` - control tools: `runpod_ctl.py`, `bench/`, README
 - `.github/workflows/dev.yml` - tests, then build in GitHub Actions (started by hand)
 - `tests/` - tests of the start logic, shim, handler and benchmark client
-- `docs/` - context, plan, handoff
+- `docs/` - context, handoff
 
 ## Status
 
