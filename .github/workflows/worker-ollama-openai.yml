@@ -19,7 +19,7 @@ permissions:
   packages: write
 
 env:
-  UPSTREAM_REF: 1848765
+  UPSTREAM_REF: 1848765ec586c62acb205b8119e34455719aa178
 
 jobs:
   build-and-push:
