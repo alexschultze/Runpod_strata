@@ -28,6 +28,3 @@ Thumbs.db
 
 # Runpod state
 .runpod_state.json
-
-# secrets of the redirect script
-tools/redirect/strata-config.php
