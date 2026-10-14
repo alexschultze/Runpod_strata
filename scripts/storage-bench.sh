@@ -28,13 +28,19 @@ else
     IO="--direct=0 --invalidate=1"; echo "io mode: buffered (no O_DIRECT here; reads may be served from cache and look too fast)"
 fi
 rm -f "$WORK/probe"
+case "$(findmnt -no FSTYPE -T "$DIR" | head -1)" in
+    fuse*) echo "note:    FUSE volume: a file written moments ago can be served from the mount's own cache (geesefs does so although O_DIRECT is accepted):"
+           echo "         read results far above the write speed (and ~1 us random-read latency) are cache hits, not the network. Trust the write speed, or read a big file written long ago (dd if=<file> of=/dev/null bs=1M count=1024 iflag=direct)." ;;
+esac
 
 FILE="$WORK/test.bin"
 # run <name> <rw> <bs> <iodepth> <numjobs> <direction: read|write> [extra fio args]
 run() {
     local name=$1 rw=$2 bs=$3 qd=$4 jobs=$5 dir=$6; shift 6
-    local out
-    out=$(fio --name="$name" --filename="$FILE" --size="${SIZE_GIB}G" --rw="$rw" --bs="$bs" \
+    local out sz="${SIZE_GIB}G" off=""
+    # several readers get disjoint parts of the file: the same blocks read by all of them would be served from cache after the first
+    if [ "$jobs" -gt 1 ] && [ "$dir" = read ]; then sz="$((SIZE_GIB * 1024 / jobs))M"; off="--offset_increment=$sz"; fi
+    out=$(fio --name="$name" --filename="$FILE" --size="$sz" $off --rw="$rw" --bs="$bs" \
           --iodepth="$qd" --numjobs="$jobs" --ioengine=libaio $IO --runtime="$RUNTIME" --time_based \
           --group_reporting --output-format=json "$@" 2>/dev/null) || { printf '%-34s failed\n' "$name"; return; }
     echo "$out" | jq -r --arg n "$name" --arg d "$dir" '
