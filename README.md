@@ -119,6 +119,7 @@ Not covered: AMD Instinct MI300X (needs Strata's HIP build). Strata documents te
 | `test-smallfiles.sh [dir] [files] [ref]` | small-file/metadata speed next to a local reference (`GIT=1` adds `git clone`/`git status`) | `/workspace` and `/tmp` |
 | `test-download.sh [url] [mib]` | internet download speed, nothing stored | `https://huggingface.co/bert-base-uncased/resolve/main/model.safetensors` (512 MiB) |
 | `bench-local.sh [options]` | waits for `/health`, then runs `bench/bench.py` (TTFT, tokens/s) against Strata in the pod | `http://127.0.0.1:$PORT` |
+| `bench-parallel.sh [--streams 1,2,3] [--rounds 2]` | N concurrent streams: tok/s per stream and in total, TTFT (compare `STRATA_PARALLEL` / engine arguments, one restart per setting) | the Strata server of this pod |
 | `calibrate.sh` | Strata's calibration, result saved to the store | `/opt/strata`, data folder, store |
 | `storage-bench.sh <dir>` | the fio tests for one directory | the given directory |
 
