@@ -26,7 +26,7 @@ The store is `<volume>/strata-store` (volume: `/runpod-volume`, else `/workspace
 incl. calibrations). A different CPU, GPU architecture or Strata version gives a different key and a rebuild; `app-<key>.json` next to the archive names version, tag and commit; the newest 3 archives per GPU and CPU are kept (the engine is compiled for
 the CPU's instruction sets and the GPU architecture it was built on).
 
-`entry.sh` (entry point) starts sshd and then waits; **nothing starts automatically** unless `AUTO_START=yes` (always for `MODE=lb|queue`). On a Serverless worker (`RUNPOD_ENDPOINT_ID` set) without an explicit `MODE`, `MODE=queue` is the default: `serverless/handler.py` takes the jobs of the queue (`/run`, `/runsync`, and RunPod's OpenAI route `/openai/v1/...` with `openai_route`/`openai_input`) once Strata is loaded; `MODE=lb` for a load-balancing endpoint (the proxy answers `/ping` and redirects `/api_direct[/path]` with 307 to the worker's own `https://<id>-8080.proxy.runpod.net/path`, for a website that should talk to the worker directly; needs `RUNPOD_POD_ID`, which RunPod sets). The start prints the worker's HTTP URL `https://<id>-8080.proxy.runpod.net/`.
+`entry.sh` (entry point) starts sshd and then waits; **nothing starts automatically** unless `AUTO_START=yes` (always for `MODE=lb|queue`). On a Serverless worker (`RUNPOD_ENDPOINT_ID` set) without an explicit `MODE`, `MODE=queue` is the default: `serverless/handler.py` takes the jobs of the queue (`/run`, `/runsync`, and RunPod's OpenAI route `/openai/v1/...` with `openai_route`/`openai_input`) once Strata is loaded; `MODE=lb` for a load-balancing endpoint. The start prints the worker's HTTP URL `https://<id>-8080.proxy.runpod.net/`.
 Run it by hand, in tmux so it stays in the foreground:
 
 ```bash
@@ -118,7 +118,7 @@ Not covered: AMD Instinct MI300X (needs Strata's HIP build). Strata documents te
 
 `tests/run.sh` runs `start.sh`, `post-setup.sh` and `publish.sh` against a fake Strata repo (no GPU, no download; needs root, it uses
 `/opt/runpod` and `/opt/strata`): key with the release tag, engine archive and restore, data copy, `COPY_DATA_LOCAL=no`, a new Strata
-version (`REINSTALL`), calibrated configs, `STRATA_API_KEY` and the `LOW_RAM` override. `tests/test_shim.py` tests the nvidia-smi shim, `tests/test_handler.py` the queue handler (fake Strata), `tests/test_proxy.py` the load-balancer proxy.
+version (`REINSTALL`), calibrated configs, `STRATA_API_KEY` and the `LOW_RAM` override. `tests/test_shim.py` tests the nvidia-smi shim, `tests/test_handler.py` the queue handler (fake Strata).
 The workflow runs both before it builds; the image gets the tags `v0.1.<run>` and the commit SHA.
 
 ## Structure

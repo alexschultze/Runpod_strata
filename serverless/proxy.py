@@ -30,30 +30,9 @@ class H(BaseHTTPRequestHandler):
         self.send_header("Content-Length", "0")
         self.end_headers()
 
-    def _direct(self):
-        """/api_direct[/path][?query] -> 307 to this worker's own proxy URL (https://<worker id>-<port>.proxy.runpod.net/path), for the
-        website: the browser talks to the worker directly instead of through the endpoint. 307 keeps method and body. Only this worker's
-        host is ever the target (the path is appended to it), so this is no open redirect."""
-        wid = os.environ.get("RUNPOD_POD_ID")
-        if not wid:
-            body = b"RUNPOD_POD_ID is not set: this worker does not know its own proxy URL\n"
-            self.send_response(503); self.send_header("Content-Type", "text/plain"); self.send_header("Content-Length", str(len(body)))
-            self.end_headers(); self.wfile.write(body); return
-        rest = self.path[len("/api_direct"):] or "/"
-        if not rest.startswith(("/", "?")):
-            rest = "/" + rest
-        if rest.startswith("?"):
-            rest = "/" + rest
-        self.send_response(307)
-        self.send_header("Location", "https://%s-%d.proxy.runpod.net%s" % (wid, UP[1], rest))
-        self.send_header("Content-Length", "0")
-        self.end_headers()
-
     def _proxy(self):
         if self.path.split("?")[0] == "/ping":
             return self._ping()
-        if self.path == "/api_direct" or self.path.startswith(("/api_direct/", "/api_direct?")):
-            return self._direct()
         n = int(self.headers.get("Content-Length") or 0)
         body = self.rfile.read(n) if n else None
         hdr = {k: v for k, v in self.headers.items() if k.lower() not in HOP | {"content-length"}}
