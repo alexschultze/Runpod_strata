@@ -75,7 +75,7 @@ Storage (fio, 1 MiB blocks unless noted; measured on pods by the project owner):
 |---|---|---|---|---|---|
 | **Network volume in the pod's data center** (`/workspace`, MooseFS) | 989 MiB/s | 1.4-1.5 GiB/s (may include cache) | 2 MiB/s (533 IOPS) | 604 MiB/s | 8.1 s |
 | **Global network volume** (geesefs) | 130-169 MiB/s | about 60 MiB/s (4 GiB test file) | 7.8 MiB/s (3722 IOPS) | – | 1.1 s |
-| **Local disk** (container disk) | not measured yet (`/app/scripts/test-local-storage.sh`) | | | | |
+| **Local disk** (container disk) | about 4000 MB/s (reported by the project owner; read or write and test details not recorded, rerun `/app/scripts/test-local-storage.sh` for the full table) | | | | |
 
 Notes: later geesefs read results of 4-13 GiB/s were **cache hits** and are not valid. Copying the model with `rsync` ran at about 300 MB/s.
 A short rule: use the volume in the pod's data center; the global one is five to six times slower to write and much slower to read.
