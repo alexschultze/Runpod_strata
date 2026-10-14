@@ -20,6 +20,7 @@ def check(name, cond):
 class Fake(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
     seen = []
+    serving = 0
 
     def log_message(self, *a):
         pass
@@ -30,6 +31,8 @@ class Fake(BaseHTTPRequestHandler):
 
     def do_GET(self):
         Fake.seen.append(("GET", self.path, self.headers.get("Authorization")))
+        if self.path == "/v1/status":
+            return self.send_json({"concurrency": {"serving": Fake.serving}} if Fake.serving else {"busy": False})
         self.send_json({"loaded": True} if self.path == "/health" else {"data": [{"id": "strata"}]})
 
     def do_POST(self):
@@ -74,5 +77,12 @@ check("HTTP error -> error object", out[0]["error"]["type"] == "worker_error" an
 out = run({"openai_route": "/admin", "openai_input": {}})
 check("paths outside /v1/ are refused", out[0]["error"]["type"] == "invalid_request")
 check("the Strata key is sent on /v1 requests", all(a == "Bearer secret" for _, p, a in Fake.seen if p.startswith("/v1/")))
+check("slots: 1 without a report and without STRATA_PARALLEL", h.serving_slots() == 1)
+os.environ["STRATA_PARALLEL"] = "4"
+check("slots: STRATA_PARALLEL when Strata reports nothing", h.serving_slots() == 4)
+Fake.serving = 2
+check("slots: what Strata serves wins (it may run fewer than asked)", h.serving_slots() == 2)
+os.environ["STRATA_PARALLEL"] = "x"; Fake.serving = 0
+check("slots: a bad STRATA_PARALLEL means 1", h.serving_slots() == 1)
 print("all tests passed" if not FAILS else "%d test(s) failed" % FAILS)
 raise SystemExit(FAILS)

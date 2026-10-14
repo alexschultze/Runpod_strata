@@ -110,6 +110,19 @@ run env; settle
 expect    "REINSTALL=1 when the engine binary is missing" "no engine binary .* REINSTALL=1"
 expect    "the setup ran"                         "FAKE SETUP reinstall=1"
 
+echo "9. STRATA_PARALLEL (batch slots)"
+fresh_pod; run env; settle
+expect_no "unset: no --batch in the config"       '"--batch"'
+run env STRATA_PARALLEL=3; settle
+expect    "3: --batch 3 in the args"              '"--batch","3"'
+run env; settle
+expect    "unset afterwards: the config stays"    '"--batch","3"'
+run env STRATA_PARALLEL=2 STRATA_ENGINE_ARGS="--pcie-frac 1.00"; settle
+expect    "2 replaces 3, ENGINE_ARGS merged too"  '"--batch","2".*"--pcie-frac","1.00"|"--pcie-frac","1.00".*"--batch","2"'
+expect_no "no stale --batch 3"                    '"--batch","3"'
+run env STRATA_PARALLEL=1; settle
+expect_no "1 removes --batch again"               '"--batch"'
+
 echo
 [ "$FAILS" = 0 ] && echo "all tests passed" || echo "$FAILS test(s) failed"
 exit "$FAILS"

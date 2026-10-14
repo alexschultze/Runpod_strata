@@ -1,7 +1,7 @@
 #!/bin/bash
 # Called by Strata's docker-entrypoint.sh (patched by start.sh) after the setup and before the server starts, on every start.
 # 0. STRATA_CALIBRATE=yes|force runs the calibration (default no: never automatically)
-# 0b. STRATA_ENGINE_ARGS (e.g. "--pcie-frac 1.00 --spec-min-p 0.70") is merged into the config args on every start
+# 0b. STRATA_PARALLEL=N (batch slots) and STRATA_ENGINE_ARGS (e.g. "--pcie-frac 1.00 --spec-min-p 0.70") is merged into the config args on every start
 # 1. writes --pool-workers into the model's config unless it has one or has been calibrated (a calibration measured the workers itself)
 # 2. in the background: archives the engine and pushes the data to the volume, once
 # Environment from start.sh: STRATA_HOME STRATA_DATA STRATA_STORE KEY TAG COPY_DATA_LOCAL POOL_WORKERS
@@ -16,17 +16,27 @@ case "${STRATA_CALIBRATE:-no}" in
             echo "post-setup.sh: config already calibrated, skipping (STRATA_CALIBRATE=force repeats it)"
         fi ;;
 esac
-if [ -n "${STRATA_ENGINE_ARGS:-}" ] && [ -f "$CFG" ] && command -v jq >/dev/null; then
+# STRATA_PARALLEL=N: N requests decoded together (Strata's batch slots, --batch N). Unset: the config stays as it is (Strata's default: one at a time).
+# 1 removes --batch/--slots again, N above 1 sets --batch N (the engine may run fewer when they do not fit: GET /v1/status concurrency.serving).
+EA="${STRATA_ENGINE_ARGS:-}"; STRIP='[]'; PAR=""
+case "${STRATA_PARALLEL:-}" in
+    '') ;;
+    *[!0-9]*) echo "post-setup.sh: STRATA_PARALLEL=$STRATA_PARALLEL is not a number, ignored" ;;
+    0|1) STRIP='["--batch","--slots"]'; PAR=1 ;;
+    *) STRIP='["--batch","--slots"]'; EA="$EA --batch $STRATA_PARALLEL"; PAR=$STRATA_PARALLEL ;;
+esac
+if { [ -n "$EA" ] || [ "$STRIP" != '[]' ]; } && [ -f "$CFG" ] && command -v jq >/dev/null; then
     for f in "$CFG" "$STRATA_HOME/strata-$TAG.json"; do
         [ -f "$f" ] || continue
-        jq --arg a "$STRATA_ENGINE_ARGS" '
+        jq --arg a "$EA" --argjson strip "$STRIP" '
           ($a | split(" ") | map(select(length>0))) as $new
-          | ($new | map(select(startswith("--")))) as $flags
+          | (($new | map(select(startswith("--")))) + $strip) as $flags
           | .args = ((.args | reduce .[] as $t ({out:[],skip:false};
                 if ($t|startswith("--")) then (if ($flags|index($t)) then .skip=true else .skip=false | .out+=[$t] end)
                 else (if .skip then . else .out+=[$t] end) end) | .out) + $new)' "$f" > "$f.tmp" && cat "$f.tmp" > "$f"; rm -f "$f.tmp"
     done
-    echo "post-setup.sh: STRATA_ENGINE_ARGS merged into the config: $STRATA_ENGINE_ARGS"
+    [ -n "$EA" ] && echo "post-setup.sh: engine arguments merged into the config: $EA"
+    [ "$PAR" = 1 ] && echo "post-setup.sh: STRATA_PARALLEL=1: one request at a time"
 fi
 if [ "${POOL_WORKERS:-0}" -gt 0 ] && [ -f "$CFG" ] && command -v jq >/dev/null; then
     if jq -e '.args | (index("--pool-workers") or index("--pcie-frac") or index("--spec-min-p"))' "$CFG" >/dev/null; then

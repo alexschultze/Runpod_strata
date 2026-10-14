@@ -33,6 +33,21 @@ def wait_ready(timeout=float(os.environ.get("READY_TIMEOUT", "3600"))):
     raise RuntimeError("Strata did not become ready within %ds" % timeout)
 
 
+def serving_slots():
+    """How many requests Strata decodes together (batch slots, STRATA_PARALLEL): what GET /v1/status reports as concurrency.serving,
+    else STRATA_PARALLEL, else 1. The worker takes that many jobs at once; the rest wait in RunPod's queue."""
+    try:
+        n = int(requests.get(BASE + "/v1/status", headers=H, timeout=5).json()["concurrency"]["serving"])
+        if n >= 1:
+            return n
+    except Exception:
+        pass
+    try:
+        return max(1, int(os.environ.get("STRATA_PARALLEL", "1")))
+    except ValueError:
+        return 1
+
+
 def error(msg, kind="worker_error"):
     return {"error": {"message": msg, "type": kind, "code": None}}
 
@@ -80,5 +95,7 @@ if __name__ == "__main__":
     except RuntimeError as e:
         print("handler.py:", e, file=sys.stderr)
         sys.exit(1)
-    print("handler.py: Strata is ready, taking jobs", flush=True)
-    runpod.serverless.start({"handler": handler, "return_aggregate_stream": True})
+    slots = serving_slots()
+    print("handler.py: Strata is ready (%d request%s at a time), taking jobs" % (slots, "" if slots == 1 else "s"), flush=True)
+    runpod.serverless.start({"handler": handler, "return_aggregate_stream": True,
+                             "concurrency_modifier": lambda current: slots})
