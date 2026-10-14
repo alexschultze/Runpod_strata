@@ -2,7 +2,7 @@
 # Hardware facts of this instance, sourced by start.sh, post-setup.sh and scripts/calibrate.sh.
 #   hw_detect   sets GPU_NAME GPU_COUNT GPU_VRAM_GIB GPU_CC DRIVER CPU_MODEL HOST_CORES CPU_QUOTA HOST_RAM_GIB POD_RAM_GIB
 #   hw_banner   prints them (the first lines of every start, to recognise the instance at a glance)
-#   hw_key      sets TUNED_KEY (GPU, count, VRAM, CPU, model tag, context): what a calibration is valid for; needs TAG and CONTEXT
+#   strata_hwkey <config>   Strata's hardware key for a config; has_calibration <key>: settings.json has an entry for it
 
 hw_slug() { printf '%s' "$1" | tr 'A-Z' 'a-z' | sed 's/[^a-z0-9]\+/-/g; s/^-//; s/-$//'; }
 
@@ -47,8 +47,13 @@ hw_banner() {
     echo "start.sh: ------------------------"
 }
 
-hw_key() {
-    local ch
-    ch=$(printf '%s' "$CPU_MODEL" | cksum | cut -d' ' -f1)
-    TUNED_KEY="$(hw_slug "$GPU_NAME")_x${GPU_COUNT}_${GPU_VRAM_GIB}g_cpu${ch}_${TAG:-unknown}_c${CONTEXT:-0}"
+# Strata's own key of what a calibration is valid for (setup.py hardware_key: GPU, VRAM, CPU, RAM, model, context, images) for a config file
+strata_hwkey() {
+    local home="${STRATA_HOME:-/opt/strata}"
+    ( cd "$home" && "$home/.venv/bin/python" -c 'import json,sys,setup; print(setup.hardware_key(json.load(open(sys.argv[1], encoding="utf-8-sig"))))' "$1" ) 2>/dev/null
+}
+
+# Strata's settings.json (calibrations per hardware key; on the volume through XDG_CONFIG_HOME) has an entry for this key
+has_calibration() {
+    jq -e --arg k "$1" '.calibration[$k]' "${XDG_CONFIG_HOME:-$HOME/.config}/strata/settings.json" >/dev/null 2>&1
 }

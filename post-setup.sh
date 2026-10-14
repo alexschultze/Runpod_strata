@@ -1,19 +1,17 @@
 #!/bin/bash
 # Called by Strata's docker-entrypoint.sh (patched by start.sh) after the setup and before the server starts, on every start.
-# 0. calibration, per hardware (GPU, CPU, model, context): a result is kept as <store>/tuned/<key>.args and applied on every start of the same hardware.
-#      STRATA_CALIBRATE=no (default)  never calibrates: the saved result for this hardware is applied, else Strata's defaults
-#      STRATA_CALIBRATE=yes           applies the saved result, calibrates (15-30 min) first when there is none for this hardware
-#      STRATA_CALIBRATE=force         calibrates (and so writes the result file, also when none exists yet) and applies it
+# 0. calibration, per hardware: Strata keeps it itself (settings.json on the volume, one entry per hardware key) and applies the entry for this
+#    hardware when its setup writes a config (start.sh runs the setup again when the hardware changed).
+#      STRATA_CALIBRATE=no (default)  never calibrates
+#      STRATA_CALIBRATE=yes           calibrates (15-30 min) when settings.json has no entry for this hardware
+#      STRATA_CALIBRATE=force         always calibrates
+#    config/.hw-key records the hardware the config belongs to (start.sh compares it).
 #    STRATA_PARALLEL=N (batch slots) and STRATA_ENGINE_ARGS (e.g. "--pcie-frac 1.00") are manual overrides, merged on top on every start
 # 1. writes --pool-workers into the model's config unless it has one or has been calibrated (a calibration measured the workers itself)
 # 2. in the background: archives the engine and pushes the data to the volume, once
 # Environment from start.sh: STRATA_HOME STRATA_DATA STRATA_STORE KEY TAG CONTEXT COPY_DATA_LOCAL POOL_WORKERS
 CFG="$STRATA_DATA/config/strata-$TAG.json"
-. "${RUNPOD_DIR:-/opt/runpod}/hwinfo.sh"; hw_detect; hw_key
-export TUNED_KEY
-TUNED_DIR="${STRATA_STORE:+$STRATA_STORE/tuned}"; TUNED_DIR="${TUNED_DIR:-$STRATA_DATA/tuned}"
-export TUNED_FILE="$TUNED_DIR/$TUNED_KEY.args"
-CALIB='["--pcie-frac","--spec-min-p","--pool-workers","--adapt-every","--adapt-swaps","--adapt-decay"]'   # what a calibration sets
+. "${RUNPOD_DIR:-/opt/runpod}/hwinfo.sh"
 
 # merge_args "<args>" '<json list of flags to remove first>': into both copies of the config (the data folder's and Strata's own)
 merge_args() {
@@ -30,24 +28,21 @@ merge_args() {
     done
 }
 
-echo "post-setup.sh: hardware key $TUNED_KEY"
+HWK=$(strata_hwkey "$CFG")
 case "${STRATA_CALIBRATE:-no}" in
     force) NEED_CAL=1 ;;
-    yes)   [ -f "$TUNED_FILE" ] && NEED_CAL=0 || NEED_CAL=1 ;;
+    yes)   if [ -n "$HWK" ] && has_calibration "$HWK"; then NEED_CAL=0; else NEED_CAL=1; fi ;;
     *)     NEED_CAL=0 ;;
 esac
 if [ "$NEED_CAL" = 1 ]; then
     echo "post-setup.sh: STRATA_CALIBRATE=$STRATA_CALIBRATE, calibrating for this hardware (15-30 min)"
     "${CALIBRATE_SCRIPT:-/app/scripts/calibrate.sh}" || echo "post-setup.sh: calibration failed, continuing without"
+    HWK=$(strata_hwkey "$CFG")
 fi
-if [ -f "$TUNED_FILE" ]; then
-    TA=$(grep -v '^#' "$TUNED_FILE" | grep -v '^LOW_RAM=' | tr '\n' ' ')   # LOW_RAM=... is read by start.sh, not an engine argument
-    merge_args "$TA" "$CALIB"   # the saved result replaces every calibrated flag (a config calibrated elsewhere keeps none of them)
-    echo "post-setup.sh: calibration for this hardware applied from $TUNED_FILE: ${TA:-(the defaults won)}"
-else
-    # no result for this hardware: Strata's defaults, not the values a calibration on other hardware left in the config
-    merge_args "" "$CALIB"
-    echo "post-setup.sh: no calibration for this hardware: Strata's defaults (STRATA_CALIBRATE=yes calibrates, ${TUNED_FILE##*/} is looked up in ${TUNED_FILE%/*})"
+if [ -n "$HWK" ]; then
+    echo "$HWK" > "$STRATA_DATA/config/.hw-key"
+    if has_calibration "$HWK"; then echo "post-setup.sh: hardware $HWK: calibration saved in Strata's settings.json"
+    else echo "post-setup.sh: hardware $HWK: no calibration saved, Strata's defaults (STRATA_CALIBRATE=yes calibrates)"; fi
 fi
 
 # STRATA_PARALLEL=N: N requests decoded together (Strata's batch slots, --batch N). Unset: the config stays as it is (Strata's default: one at a time).
@@ -76,7 +71,6 @@ if [ "${POOL_WORKERS:-0}" -gt 0 ] && [ -f "$CFG" ] && command -v jq >/dev/null; 
         echo "post-setup.sh: --pool-workers $POOL_WORKERS written into the config"
     fi
 fi
-[ -f "$CFG" ] && { [ "${REINSTALL:-0}" = 1 ] || [ ! -f "$STRATA_DATA/config/.low-ram" ]; } && echo "${LOW_RAM:-}" > "$STRATA_DATA/config/.low-ram"   # the LOW_RAM of the setup that wrote this config (start.sh compares it with the calibration file's)
 [ -n "${SHA:-}" ] && [ -f "$CFG" ] && echo "$SHA" > "$STRATA_DATA/config/.built-with"   # the Strata commit this config now belongs to
 if [ -n "$STRATA_STORE" ]; then
     mkdir -p "$STRATA_STORE/logs"

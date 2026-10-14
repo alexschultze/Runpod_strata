@@ -238,17 +238,22 @@ if [ ! -f "$STRATA_HOME/engine/strata" ] && [ -f "$STRATA_DATA/config/strata-$TA
     export REINSTALL=1
     echo "start.sh: no engine binary in $STRATA_HOME/engine yet: REINSTALL=1 for this start so the setup builds it (3-4 minutes; the model files already present are kept)"
 fi
-# LOW_RAM from this hardware's calibration file (a line LOW_RAM=... in <store>/tuned/<key>.args): your own LOW_RAM wins. Strata's setup applies it, so a
-# value that differs from the one the config was set up with (config/.low-ram) re-runs the setup (REINSTALL=1; the model files are kept).
-hw_key
-TF="${STRATA_STORE:+$STRATA_STORE/tuned}"; TF="${TF:-$STRATA_DATA/tuned}/$TUNED_KEY.args"
-if [ -z "${LOW_RAM:-}" ] && [ -f "$TF" ]; then
-    L=$(sed -n 's/^LOW_RAM=//p' "$TF" | head -1)
-    if [ -n "$L" ]; then
-        export LOW_RAM="$L"; echo "start.sh: LOW_RAM=$L (from the calibration file for this hardware)"
-        if [ -f "$STRATA_DATA/config/strata-$TAG.json" ] && [ "$(cat "$STRATA_DATA/config/.low-ram" 2>/dev/null)" != "$L" ] && [ "${REINSTALL:-0}" != 1 ]; then
-            export REINSTALL=1; echo "start.sh: the config was set up with LOW_RAM='$(cat "$STRATA_DATA/config/.low-ram" 2>/dev/null)': REINSTALL=1 for this start"
+# Calibration is per hardware and Strata keeps it itself (settings.json: one entry per hardware key, on the volume), applying the entry for this
+# hardware when its setup writes a config. So when the config was set up on other hardware (config/.hw-key written by post-setup.sh differs from
+# Strata's key now), or carries calibrated values of unknown hardware (no .hw-key), the setup runs again once: REINSTALL=1, the model files are kept.
+CFGJ="$STRATA_DATA/config/strata-$TAG.json"
+if [ -f "$CFGJ" ] && [ "${REINSTALL:-0}" != 1 ]; then
+    HWK=$(strata_hwkey "$CFGJ"); MARK="$STRATA_DATA/config/.hw-key"; WHY=""
+    if [ -n "$HWK" ]; then
+        if [ -f "$MARK" ]; then
+            [ "$(cat "$MARK")" = "$HWK" ] || WHY="the config was set up on other hardware ($(cat "$MARK"))"
+        elif jq -e '.args | (index("--pcie-frac") or index("--spec-min-p"))' "$CFGJ" >/dev/null 2>&1; then
+            WHY="the config carries calibrated values of unknown hardware"
         fi
+    fi
+    if [ -n "$WHY" ]; then
+        export REINSTALL=1
+        echo "start.sh: $WHY, this is $HWK: RECALIBRATE for this start (Strata's setup runs again with REINSTALL=1, keeps the model files and applies the calibration saved for this hardware, else its defaults)"
     fi
 fi
 BUILT_WITH="$STRATA_DATA/config/.built-with"

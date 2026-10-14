@@ -33,13 +33,19 @@ if [ ! -f "$cfg" ] || [ "${REINSTALL:-0}" = 1 ]; then
   mkdir -p engine "$STRATA_DATA/models" "$STRATA_DATA/packs/$tag" "$STRATA_DATA/mtp"
   echo built > engine/BUILD.json; echo bin > engine/strata
   [ -f "$STRATA_DATA/models/model.gguf" ] || echo bigdata > "$STRATA_DATA/models/model.gguf"
-  [ -f "$cfg" ] || { echo '{"args":["--max-context","32768"]}' > "strata-$tag.json"; cp -f "strata-$tag.json" "$cfg"; }
+  # like Strata's setup: a new config gets the calibration saved for this hardware (settings.json), else the defaults
+  HKEY=$(python3 -c 'import setup; print(setup.hardware_key({}))')
+  S="${XDG_CONFIG_HOME:-$HOME/.config}/strata/settings.json"
+  ARGS='["--max-context","32768"]'
+  [ -f "$S" ] && ARGS=$(jq -c --arg k "$HKEY" '["--max-context","32768"] + ((.calibration[$k].settings // {}) | to_entries | map([.key, .value]) | flatten)' "$S")
+  echo "{\"args\":$ARGS}" > "strata-$tag.json"; cp -f "strata-$tag.json" "$cfg"
 else
   ln -sfn "$cfg" "/opt/strata/strata-$tag.json"
 fi
 set -- --port "$PORT"
 echo "FAKE SERVER LOW_RAM=${LOW_RAM-unset} API_KEY=${API_KEY-unset} args=$(jq -c .args "strata-$tag.json")"
 EOS
+printf 'import os\ndef hardware_key(cfg):\n    return "|".join([os.environ.get("FAKE_GPU", "Fake GPU 24G"), "24GB", "cpu", "16GB", "model", "32768", "text"])\n' > setup.py
 echo "" > requirements.txt; printf '#!/bin/sh\n' > setup.sh; chmod +x docker-entrypoint.sh setup.sh
 printf 'project(strata VERSION 0.1.1 LANGUAGES CXX)\n' > CMakeLists.txt
 G="git -c user.email=t@t -c user.name=t"
@@ -87,47 +93,37 @@ echo "6. without an API key Strata is not started"
 OUT=$(env -u API_KEY -u STRATA_API_KEY PATH="$T/bin:$PATH" STRATA_STORE="$T/store" STRATA_LOCAL="$T/local" MODEL=IQ2_XS timeout 5 bash "$HERE/start.sh" 2>&1)
 expect    "refused"                               "NOT started"
 
-echo "7. calibration per hardware: never by default; yes calibrates once per hardware and applies the result"
+echo "7. calibration per hardware (entries in Strata's settings.json): never by default; yes calibrates when none exists; a hardware change re-runs the setup"
 cat > "$T/cal.sh" <<'EOS'
 #!/bin/bash
 echo ran >> "$CALLOG"
-mkdir -p "$(dirname "$TUNED_FILE")"
-printf '# fake\n--pcie-frac 0.55 --spec-min-p 0.30\n' > "$TUNED_FILE"
+. /opt/runpod/hwinfo.sh
+CFGJ="$STRATA_DATA/config/strata-iq2_xs.json"
+K=$(strata_hwkey "$CFGJ")
+S="$XDG_CONFIG_HOME/strata/settings.json"; mkdir -p "$(dirname "$S")"; [ -f "$S" ] || echo '{}' > "$S"
+jq --arg k "$K" '.calibration[$k]={settings:{"--pcie-frac":"0.55","--spec-min-p":"0.30"},tok_s:1,date:"x"}' "$S" > "$S.t" && cat "$S.t" > "$S"
+jq '.args += ["--pcie-frac","0.55","--spec-min-p","0.30"]' "$CFGJ" > "$CFGJ.t" && cat "$CFGJ.t" > "$CFGJ"; rm -f "$S.t" "$CFGJ.t"
 EOS
 chmod +x "$T/cal.sh"
 CAL="CALIBRATE_SCRIPT=$T/cal.sh CALLOG=$T/cal.log"
 calls() { [ -f "$T/cal.log" ] && wc -l < "$T/cal.log" || echo 0; }
 fresh_pod; run env $CAL; settle
 [ "$(calls)" = 0 ] && ok "default: no calibration" || bad "default calibrated"
+[ -s "$T/local/Strata-data/config/.hw-key" ] && ok "the config records its hardware" || bad ".hw-key missing"
 fresh_pod; run env $CAL STRATA_CALIBRATE=yes; settle
-[ "$(calls)" = 1 ] && ok "yes, no result for this hardware: calibrates" || bad "yes did not calibrate once ($(calls))"
-expect    "result applied to the config"          '"--pcie-frac","0.55","--spec-min-p","0.30"'
+[ "$(calls)" = 1 ] && ok "yes, no entry for this hardware: calibrates" || bad "yes did not calibrate once ($(calls))"
 fresh_pod; run env $CAL STRATA_CALIBRATE=yes; settle
-[ "$(calls)" = 1 ] && ok "yes, result exists: applied, not calibrated again" || bad "yes calibrated again"
+[ "$(calls)" = 1 ] && ok "yes, entry exists: no new calibration" || bad "yes calibrated again"
+expect    "the calibrated values are in the config" '"--pcie-frac","0.55"'
 fresh_pod; run env $CAL STRATA_CALIBRATE=yes FAKE_GPU="Other GPU 32G"; settle
-[ "$(calls)" = 2 ] && ok "other GPU: calibrates for itself" || bad "other GPU did not calibrate ($(calls))"
-cfgs=$(ls "$T"/local/Strata-data/config/strata-*.json)
-for f in $cfgs; do jq '.args=["--pcie-frac","1.00","--pool-workers","9"]' "$f" > "$f.t" && cat "$f.t" > "$f"; rm -f "$f.t"; done
+expect    "other hardware: the setup runs again"  "set up on other hardware.*REINSTALL=1"
+[ "$(calls)" = 2 ] && ok "other hardware without an entry: calibrates" || bad "other hardware did not calibrate ($(calls))"
 run env $CAL FAKE_GPU="Fake GPU 24G"; settle
-expect_no "values calibrated on other hardware are replaced" '"--pool-workers","9"'
-for f in $cfgs; do jq '.args=["--pcie-frac","1.00","--pool-workers","9"]' "$f" > "$f.t" && cat "$f.t" > "$f"; rm -f "$f.t"; done
-run env $CAL FAKE_GPU="Unknown GPU"; settle
-expect_no "no result for this hardware (STRATA_CALIBRATE=no): Strata's defaults, other hardware's values dropped" '"--pcie-frac"'
-
-echo "9. calibrate.sh keeps the result per hardware: .args (with LOW_RAM) and Strata's full output (.log)"
-for f in $cfgs; do jq '.args=["--pcie-frac","0.9","--spec-min-p","0.7"]' "$f" > "$f.t" && cat "$f.t" > "$f"; rm -f "$f.t"; done
-env STRATA_DATA="$T/local/Strata-data" STRATA_STORE="$T/store" TAG=iq2_xs CONTEXT=32768 LOW_RAM=resident PATH="$T/bin:$PATH" bash "$HERE/scripts/calibrate.sh" > "$T/cal.out" 2>&1
-TF=$(sed -n 's/.*saved to \(.*\.args\):.*/\1/p' "$T/cal.out")
-grep -q -- '^--pcie-frac 0.9 --spec-min-p 0.7$' "$TF" 2>/dev/null && ok "calibrated flags in the .args file" || bad "flags missing in $TF"
-grep -q '^LOW_RAM=resident$' "$TF" 2>/dev/null && ok "LOW_RAM in the .args file" || bad "LOW_RAM missing"
-[ -f "${TF%.args}.log" ] && ok "Strata's output in the .log file" || bad ".log missing"
-
-echo "10. LOW_RAM from the calibration file (own LOW_RAM wins)"
-run env; settle
-expect    "LOW_RAM taken from the file"           "FAKE SERVER LOW_RAM=resident"
-expect    "setup re-run: the config had another LOW_RAM" "REINSTALL=1 for this start"
-run env LOW_RAM=mmap; settle
-expect    "own LOW_RAM wins"                      "FAKE SERVER LOW_RAM=mmap"
+expect    "back on the first hardware: setup again, its saved values return" '"--pcie-frac","0.55"'
+[ "$(calls)" = 2 ] && ok "no new calibration for known hardware" || bad "calibrated known hardware"
+rm -f "$T/local/Strata-data/config/.hw-key"
+run env $CAL; settle
+expect    "calibrated values of unknown hardware: setup again once" "unknown hardware.*REINSTALL=1"
 
 echo "8. STRATA_PARALLEL: N sets --batch N, 1 removes it"
 fresh_pod; run env STRATA_PARALLEL=3; settle
