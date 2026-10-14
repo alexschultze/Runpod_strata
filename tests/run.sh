@@ -31,7 +31,7 @@ mkdir -p "$STRATA_DATA/config"
 if [ ! -f "$cfg" ] || [ "${REINSTALL:-0}" = 1 ]; then
   echo "FAKE SETUP reinstall=${REINSTALL:-0}"
   mkdir -p engine "$STRATA_DATA/models" "$STRATA_DATA/packs/$tag" "$STRATA_DATA/mtp"
-  echo built > engine/BUILD.json
+  echo built > engine/BUILD.json; echo bin > engine/strata
   [ -f "$STRATA_DATA/models/model.gguf" ] || echo bigdata > "$STRATA_DATA/models/model.gguf"
   [ -f "$cfg" ] || { echo '{"args":["--max-context","32768"]}' > "strata-$tag.json"; cp -f "strata-$tag.json" "$cfg"; }
 else

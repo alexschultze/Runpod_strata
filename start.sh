@@ -145,7 +145,7 @@ progress_run() {
 }
 
 # ready = the Python environment and the engine are there AND they belong to this key (GPU architecture, CPU, Strata commit)
-app_ready() { [ -f "$STRATA_HOME/.venv/.strata-bootstrap-done" ] && [ -f "$STRATA_HOME/engine/BUILD.json" ] && [ "$(cat "$STRATA_HOME/.strata-key" 2>/dev/null)" = "$KEY" ]; }
+app_ready() { [ -f "$STRATA_HOME/.venv/.strata-bootstrap-done" ] && [ -f "$STRATA_HOME/engine/BUILD.json" ] && [ -f "$STRATA_HOME/engine/strata" ] && [ "$(cat "$STRATA_HOME/.strata-key" 2>/dev/null)" = "$KEY" ]; }
 if ! app_ready; then
     if [ -n "$ARCHIVE" ] && [ -f "$ARCHIVE" ]; then
         echo "start.sh: restoring the engine from $ARCHIVE"
@@ -175,6 +175,10 @@ if ! app_ready; then   # no archive for this key: clone and prepare the Python e
         touch "$STRATA_HOME/.venv/.strata-bootstrap-done"
     fi
     echo "$KEY" > "$STRATA_HOME/.strata-key"
+fi
+if [ -f "$STRATA_HOME/engine/BUILD.json" ] && [ ! -f "$STRATA_HOME/engine/strata" ]; then   # stamp without binary (broken archive/copy): without this Strata's setup would call the engine done
+    echo "start.sh: WARNING: engine/BUILD.json exists but engine/strata is missing: removing the stamp so the setup builds the engine again" >&2
+    rm -f "$STRATA_HOME/engine/BUILD.json"
 fi
 chmod +x "$STRATA_HOME/setup.sh" "$STRATA_HOME/docker-entrypoint.sh"
 export STRATA_VERSION=$(sed -n 's/^project(strata VERSION \([0-9.]*\).*/\1/p' "$STRATA_HOME/CMakeLists.txt" 2>/dev/null | head -1)
