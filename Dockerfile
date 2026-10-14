@@ -16,7 +16,7 @@ RUN apt-get update --yes && \
 COPY serverless/proxy.py serverless/handler.py /opt/runpod/
 COPY scripts /app/scripts
 COPY strata/bench /app/bench
-COPY entry.sh start.sh sshd.sh post-setup.sh publish.sh /opt/runpod/
+COPY entry.sh start.sh sshd.sh post-setup.sh publish.sh volume-check.sh update-scripts.sh /opt/runpod/
 RUN chmod +x /opt/runpod/*.sh /app/scripts/*.sh /app/bench/bench.py /app/scripts/nvidia-smi-shim.py && \
     install -m 755 /app/scripts/nvidia-smi-shim.py /usr/local/bin/nvidia-smi
 

@@ -43,6 +43,7 @@ else
     echo "start.sh: no volume found (/runpod-volume, /workspace): nothing is stored, the setup is repeated after every pod restart"
 fi
 mkdir -p "$STRATA_LOCAL" "$STRATA_DATA"
+[ -n "$STRATA_STORE" ] && [ -x /opt/runpod/volume-check.sh ] && /opt/runpod/volume-check.sh "$STRATA_STORE" || true   # warns when the volume reads slower than VOLUME_MIN_MBPS (500)
 
 # ---- Strata's setup reads the host's RAM from /proc/meminfo and cannot see the pod's limit: derive values from the cgroup ----
 mem_gib() {
