@@ -7,3 +7,6 @@ Fix for runpod-workers/worker-ollama (OpenAI route returns 502).
     git push -u origin fix/openai-route
 
 Then open the PR using PR_DESCRIPTION.md. The patch is based on upstream commit 1848765.
+
+For the upstream issue use ISSUE.md and attach worker-ollama-openai-route.patch
+(apply with `git am`).
