@@ -97,8 +97,8 @@ Not covered: AMD Instinct MI300X (needs Strata's HIP build). Strata documents te
 | Script | What it does | Paths it checks |
 |---|---|---|
 | `check-env.sh` | driver/CUDA, GPU, RAM and cgroup limit, CPU/AVX2, free space | `/`, `/workspace`, `/runpod-volume`, `/dev/shm` |
-| `test-local-storage.sh [dir...] [size_gib] [runtime_s]` (any order)`` | fio: sequential write/read, random 4k/128k reads, small files | `/tmp/strata-bench` (container disk), `/dev/shm` |
-| `test-network-storage.sh [dir...] [size_gib] [runtime_s]` (any order)`` | same tests on the volumes, classified network/local by filesystem | `/workspace`, `/data`, `/runpod-volume` (those that exist) |
+| `test-local-storage.sh [dir...] [size_gib] [runtime_s] (any order)` | fio: sequential write/read, random 4k/128k reads, small files | `/tmp/strata-bench` (container disk), `/dev/shm` |
+| `test-network-storage.sh [dir...] [size_gib] [runtime_s] (any order)` | same tests on the volumes, classified network/local by filesystem | `/workspace`, `/data`, `/runpod-volume` (those that exist) |
 | `test-smallfiles.sh [dir] [files] [ref]` | small-file/metadata speed next to a local reference (`GIT=1` adds `git clone`/`git status`) | `/workspace` and `/tmp` |
 | `test-download.sh [url] [mib]` | internet download speed, nothing stored | `https://huggingface.co/bert-base-uncased/resolve/main/model.safetensors` (512 MiB) |
 | `bench-local.sh [options]` | waits for `/health`, then runs `bench/bench.py` (TTFT, tokens/s) against Strata in the pod | `http://127.0.0.1:$PORT` |
