@@ -114,6 +114,21 @@ for f in $cfgs; do jq '.args=["--pcie-frac","1.00","--pool-workers","9"]' "$f" >
 run env $CAL FAKE_GPU="Unknown GPU"; settle
 expect_no "no result for this hardware (STRATA_CALIBRATE=no): Strata's defaults, other hardware's values dropped" '"--pcie-frac"'
 
+echo "9. calibrate.sh keeps the result per hardware: .args (with LOW_RAM) and Strata's full output (.log)"
+for f in $cfgs; do jq '.args=["--pcie-frac","0.9","--spec-min-p","0.7"]' "$f" > "$f.t" && cat "$f.t" > "$f"; rm -f "$f.t"; done
+env STRATA_DATA="$T/local/Strata-data" STRATA_STORE="$T/store" TAG=iq2_xs CONTEXT=32768 LOW_RAM=resident PATH="$T/bin:$PATH" bash "$HERE/scripts/calibrate.sh" > "$T/cal.out" 2>&1
+TF=$(sed -n 's/.*saved to \(.*\.args\):.*/\1/p' "$T/cal.out")
+grep -q -- '^--pcie-frac 0.9 --spec-min-p 0.7$' "$TF" 2>/dev/null && ok "calibrated flags in the .args file" || bad "flags missing in $TF"
+grep -q '^LOW_RAM=resident$' "$TF" 2>/dev/null && ok "LOW_RAM in the .args file" || bad "LOW_RAM missing"
+[ -f "${TF%.args}.log" ] && ok "Strata's output in the .log file" || bad ".log missing"
+
+echo "10. LOW_RAM from the calibration file (own LOW_RAM wins)"
+run env; settle
+expect    "LOW_RAM taken from the file"           "FAKE SERVER LOW_RAM=resident"
+expect    "setup re-run: the config had another LOW_RAM" "REINSTALL=1 for this start"
+run env LOW_RAM=mmap; settle
+expect    "own LOW_RAM wins"                      "FAKE SERVER LOW_RAM=mmap"
+
 echo "8. STRATA_PARALLEL: N sets --batch N, 1 removes it"
 fresh_pod; run env STRATA_PARALLEL=3; settle
 expect    "3: --batch 3 in the args"              '"--batch","3"'

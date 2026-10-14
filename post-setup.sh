@@ -41,7 +41,7 @@ if [ "$NEED_CAL" = 1 ]; then
     "${CALIBRATE_SCRIPT:-/app/scripts/calibrate.sh}" || echo "post-setup.sh: calibration failed, continuing without"
 fi
 if [ -f "$TUNED_FILE" ]; then
-    TA=$(grep -v '^#' "$TUNED_FILE" | tr '\n' ' ')
+    TA=$(grep -v '^#' "$TUNED_FILE" | grep -v '^LOW_RAM=' | tr '\n' ' ')   # LOW_RAM=... is read by start.sh, not an engine argument
     merge_args "$TA" "$CALIB"   # the saved result replaces every calibrated flag (a config calibrated elsewhere keeps none of them)
     echo "post-setup.sh: calibration for this hardware applied from $TUNED_FILE: ${TA:-(the defaults won)}"
 else
@@ -76,6 +76,7 @@ if [ "${POOL_WORKERS:-0}" -gt 0 ] && [ -f "$CFG" ] && command -v jq >/dev/null; 
         echo "post-setup.sh: --pool-workers $POOL_WORKERS written into the config"
     fi
 fi
+[ -f "$CFG" ] && { [ "${REINSTALL:-0}" = 1 ] || [ ! -f "$STRATA_DATA/config/.low-ram" ]; } && echo "${LOW_RAM:-}" > "$STRATA_DATA/config/.low-ram"   # the LOW_RAM of the setup that wrote this config (start.sh compares it with the calibration file's)
 [ -n "${SHA:-}" ] && [ -f "$CFG" ] && echo "$SHA" > "$STRATA_DATA/config/.built-with"   # the Strata commit this config now belongs to
 if [ -n "$STRATA_STORE" ]; then
     mkdir -p "$STRATA_STORE/logs"

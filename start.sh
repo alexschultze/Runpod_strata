@@ -238,6 +238,19 @@ if [ ! -f "$STRATA_HOME/engine/strata" ] && [ -f "$STRATA_DATA/config/strata-$TA
     export REINSTALL=1
     echo "start.sh: no engine binary in $STRATA_HOME/engine yet: REINSTALL=1 for this start so the setup builds it (3-4 minutes; the model files already present are kept)"
 fi
+# LOW_RAM from this hardware's calibration file (a line LOW_RAM=... in <store>/tuned/<key>.args): your own LOW_RAM wins. Strata's setup applies it, so a
+# value that differs from the one the config was set up with (config/.low-ram) re-runs the setup (REINSTALL=1; the model files are kept).
+hw_key
+TF="${STRATA_STORE:+$STRATA_STORE/tuned}"; TF="${TF:-$STRATA_DATA/tuned}/$TUNED_KEY.args"
+if [ -z "${LOW_RAM:-}" ] && [ -f "$TF" ]; then
+    L=$(sed -n 's/^LOW_RAM=//p' "$TF" | head -1)
+    if [ -n "$L" ]; then
+        export LOW_RAM="$L"; echo "start.sh: LOW_RAM=$L (from the calibration file for this hardware)"
+        if [ -f "$STRATA_DATA/config/strata-$TAG.json" ] && [ "$(cat "$STRATA_DATA/config/.low-ram" 2>/dev/null)" != "$L" ] && [ "${REINSTALL:-0}" != 1 ]; then
+            export REINSTALL=1; echo "start.sh: the config was set up with LOW_RAM='$(cat "$STRATA_DATA/config/.low-ram" 2>/dev/null)': REINSTALL=1 for this start"
+        fi
+    fi
+fi
 BUILT_WITH="$STRATA_DATA/config/.built-with"
 if [ -f "$BUILT_WITH" ] && [ -f "$STRATA_DATA/config/strata-$TAG.json" ] && [ -n "${SHA:-}" ] && [ "$(cat "$BUILT_WITH")" != "$SHA" ] && [ "${REINSTALL:-0}" != 1 ]; then
     export REINSTALL=1
