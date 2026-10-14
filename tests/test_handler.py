@@ -35,6 +35,7 @@ class Fake(BaseHTTPRequestHandler):
     def do_POST(self):
         body = json.loads(self.rfile.read(int(self.headers.get("Content-Length") or 0)) or b"{}")
         Fake.seen.append(("POST", self.path, self.headers.get("Authorization")))
+        Fake.last_body = body
         if body.get("bad"):
             return self.send_json({"error": "nope"}, 400)
         if not body.get("stream"):
@@ -67,6 +68,10 @@ out = run({"openai_route": "/v1/models"})
 check("openai route without input: GET /v1/models", out == [{"data": [{"id": "strata"}]}] and ("GET", "/v1/models", "Bearer secret") in Fake.seen)
 out = run({"path": "/v1/chat/completions", "body": {"messages": []}})
 check("own format, JSON answer", out[0].get("choices"))
+out = run({"prompt": "Hello World", "max_tokens": 5})
+check("RunPod default example {prompt} -> one user message", out[0].get("choices") and Fake.last_body == {"max_tokens": 5, "messages": [{"role": "user", "content": "Hello World"}]})
+out = run({"body": {"prompt": "Hi"}})
+check("{body: {prompt}} too", Fake.last_body == {"messages": [{"role": "user", "content": "Hi"}]})
 out = run({"body": {"stream": True}})
 check("own format, stream: parsed chunks", out == [{"n": 1}, {"n": 2}])
 out = run({"openai_route": "/v1/chat/completions", "openai_input": {"bad": 1}})
