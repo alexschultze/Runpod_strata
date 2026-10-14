@@ -141,21 +141,24 @@ Not covered: AMD Instinct MI300X (needs Strata's HIP build). Strata documents te
 ## Tests
 
 `tests/run.sh` runs `start.sh`, `post-setup.sh` and `publish.sh` against a fake Strata repo (no GPU, no download; needs root, it uses
-`/opt/runpod` and `/opt/strata`): key with the release tag, engine archive and restore, data copy, `COPY_DATA_LOCAL=no`, a new Strata
-version (`REINSTALL`), calibrated configs, `STRATA_API_KEY` and the `LOW_RAM` override. `tests/test_shim.py` tests the nvidia-smi shim, `tests/test_handler.py` the queue handler (fake Strata).
-The workflow runs both before it builds; the image gets the tags `v0.1.<run>` and the commit SHA.
+`/opt/runpod` and `/opt/strata`): key with the release tag, engine archive and restore, data copy, `COPY_DATA_LOCAL=no`, a new Strata version,
+a config without engine, the API key, calibration per hardware (`STRATA_CALIBRATE`, hardware change) and `STRATA_PARALLEL`.
+`tests/test_shim.py` tests the nvidia-smi shim, `tests/test_handler.py` the queue handler and `tests/test_bench_parallel.py` the parallel benchmark
+(fake servers). The workflow runs them before it builds; the image gets the tags `v0.1.<run>` and the commit SHA.
 
 ## Structure
 
-- `Dockerfile`, `entry.sh`, `start.sh`, `sshd.sh`, `post-setup.sh`, `publish.sh` - image and start logic
-- `serverless/` - `proxy.py` (`/ping`) and `handler.py` (queue endpoint)
-- `scripts/` - benchmarks, environment check, calibration, nvidia-smi shim; `strata/bench/bench.py` is `/app/bench/bench.py`
+- `Dockerfile`, `entry.sh`, `start.sh`, `sshd.sh`, `hwinfo.sh`, `post-setup.sh`, `publish.sh`, `update-scripts.sh`, `volume-check.sh` - image and start logic
+- `serverless/` - `proxy.py` (`/ping`, load balancer) and `handler.py` (queue endpoint, OpenAI route, `/api_direct`)
+- `scripts/` - benchmarks (`bench-local.sh`, `bench-parallel.sh`), storage tests, environment check, calibration, nvidia-smi shim; `strata/bench/` is `/app/bench/`
 - `strata/` - control tools: `runpod_ctl.py`, `build.sh`, README
-- `.github/workflows/dev.yml` - tests, then build in GitHub Actions
-- `tests/` - tests of the start logic and the shim
+- `.github/workflows/dev.yml` - tests, then build in GitHub Actions (started by hand)
+- `tests/` - tests of the start logic, shim, handler and benchmark client
 - `docs/` - context, plan, handoff
 
 ## Status
 
-Built by the workflow; tested in a sandbox with a fake Strata (key, archive restore, data copy, `COPY_DATA_LOCAL=no`, hook, pool workers).
-Not tested: the real Strata setup through `start.sh`, the post-setup hook against Strata's real `docker-entrypoint.sh`, Serverless.
+Built by the workflow; tested in a sandbox with a fake Strata and fake servers. Run on real Runpod pods by the project owner: the start flow with
+engine archive and data copy (about 3.5 minutes), the calibration on an RTX PRO 4500 Blackwell, the Serverless queue worker and its proxy URL.
+Not yet confirmed on real hardware: the hardware-change setup re-run and Strata's application of a saved calibration, `STRATA_PARALLEL` gains,
+the load-balancer mode, `/api_direct`.
