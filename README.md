@@ -8,6 +8,18 @@ minutes afterwards. Details for tinkerers: [README_DETAILS.md](README_DETAILS.md
 ghcr.io/alexschultze/strata-runpod:<tag>        # the tag of the latest successful build in GitHub Actions
 ```
 
+## Key points
+
+1. **Serverless: use a network volume (strongly recommended), in the same data center, not the global volume.** This image keeps the compiled
+   engine and the calibration on the volume (engine archive per GPU architecture and CPU, Strata's calibration per hardware). A worker on
+   hardware that was seen before restores both instead of compiling and calibrating again. Without a volume every cold start repeats all of it.
+2. **The first start on new hardware compiles the engine and, with `STRATA_CALIBRATE=yes`, calibrates: expect startup times of up to 15-20 minutes**
+   (the project owner's figure; compiling takes 3-4 minutes, and Strata's documentation gives 15-30 minutes for the calibration alone, so allow 30 minutes or
+   more to be safe). Set timeouts and idle limits accordingly, and start such a worker once by hand before real traffic arrives. Without calibration
+   (`STRATA_CALIBRATE=no`, the default) only the compile applies.
+3. **The fastest start** (engine compiled and calibrated, network volume in the same data center, not the global one): **about 90-150 seconds** (the
+   project owner's figure; an earlier run that included copying the model to the local disk took 3.5 minutes).
+
 ## What you need
 
 | | |
@@ -27,7 +39,8 @@ pod waits; run `/opt/runpod/start.sh` in `tmux` (or set `AUTO_START=yes` to star
 **Serverless:** create a queue-based endpoint with the image, a network volume in the same data center and an 85 GB container disk. Workers start
 Strata automatically (`MODE=queue` is the default there; set it yourself if your worker does not). Call `/runsync` or `/run`, or Runpod's OpenAI route (`https://api.runpod.ai/v2/<endpoint id>/openai/v1/...`).
 
-**The first request after idle takes about 4 minutes** (see "How long does a start take"). Set client timeouts to 10-15 minutes and prefer
+**The first request after idle waits for a worker to start**: about 90-150 seconds at best, 3.5-4 minutes when the model is copied locally, and 15-20 minutes
+on hardware nobody has run before (see "How long does a start take"). Set client timeouts to 10-15 minutes (more for new hardware) and prefer
 `/run` + `/status/<id>` over `/runsync`. In LiteLLM: `timeout: 900`, `stream_timeout: 900`, `num_retries: 0`.
 
 ## The variables you will actually use
@@ -55,8 +68,9 @@ All other variables are listed in [README_DETAILS.md](README_DETAILS.md).
 
 | Case | Time |
 |---|---|
-| Normal start: engine archive and model data on the volume, model copied to the local disk | **about 3.5 minutes** (measured) |
-| First start on a GPU architecture nobody built for yet | + 3-4 minutes of compiling, once; the archive is saved for the next start |
+| **Fastest:** engine compiled and calibrated, network volume in the same data center (not global) | **about 90-150 seconds** (project owner's figure) |
+| Normal start with the model copied from the volume to the local disk (`COPY_DATA_LOCAL=yes`) | about 3.5 minutes (measured earlier) |
+| **First start on new hardware:** compile the engine (once per GPU architecture and CPU) and, with `STRATA_CALIBRATE=yes`, calibrate | **up to 15-20 minutes** by the owner's figure (compiling 3-4 minutes; Strata's documentation gives 15-30 minutes for the calibration alone) |
 | Very first start, no model data on the volume | + download of about 70 GB (not measured) |
 | Image not yet cached on the host | + pull of the image (about 3.8 GiB compressed; not measured) |
 
