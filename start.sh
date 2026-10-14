@@ -19,6 +19,7 @@
 #   RESIDENT_BUDGET_GIB  unsloth only: GiB of experts kept in RAM, default pod RAM (cgroup limit) minus 24
 # Further Strata variables (KV, GPU, GPUS, PORT, VISION, REINSTALL, ...) pass through to Strata's docker-entrypoint.sh.
 set -e
+. "$(dirname "$(readlink -f "$0")")/hwinfo.sh"; hw_detect; hw_banner   # first thing: which instance is this
 # a Serverless worker without an explicit MODE is queue-based (RunPod sets RUNPOD_ENDPOINT_ID there): without the handler the queue is never processed
 if [ -z "${MODE:-}" ] && [ -n "${RUNPOD_ENDPOINT_ID:-}" ]; then MODE=queue; echo "start.sh: Serverless worker (RUNPOD_ENDPOINT_ID set), MODE=queue (set MODE=lb for a load-balancing endpoint)"; fi
 MODE="${MODE:-pod}"
