@@ -1,9 +1,9 @@
 #!/bin/bash
 # Quick read-speed check of the volume that holds the store (about 10 s). Warns, never blocks: engine archive and data are read from
 # there (a slow volume makes the first copy to /tmp slow). Called by start.sh; usable by hand: /opt/runpod/volume-check.sh [dir]
-# VOLUME_CHECK=no switches it off, VOLUME_MIN_MBPS (default 500) is the warning threshold, VOLUME_CHECK_MIB (default 512) the test size.
+# Opt-in: only runs with VOLUME_CHECK=yes (it costs ~10 s per start, too much for Serverless); VOLUME_MIN_MBPS (default 500) is the warning threshold, VOLUME_CHECK_MIB (default 512) the test size.
 DIR="${1:-${STRATA_STORE:-}}"
-case "${VOLUME_CHECK:-yes}" in [Nn]*|0|[Ff]alse) exit 0 ;; esac
+case "${VOLUME_CHECK:-no}" in [Yy]*|1|[Tt]rue) ;; *) exit 0 ;; esac   # off by default (costs seconds at every start); by hand: VOLUME_CHECK=yes /opt/runpod/volume-check.sh
 [ -n "$DIR" ] && [ -d "$DIR" ] && [ -w "$DIR" ] || exit 0
 command -v fio >/dev/null && command -v jq >/dev/null || { echo "volume-check: fio/jq missing, skipped"; exit 0; }
 MIN="${VOLUME_MIN_MBPS:-500}"; MIB="${VOLUME_CHECK_MIB:-512}"; Q=$((MIB / 4))
