@@ -264,7 +264,10 @@ fi
 if [ "$MODE" = pod ]; then exec /opt/strata/docker-entrypoint.sh; fi
 
 export STRATA_PORT=8080
-( PORT=8080 HOST=127.0.0.1 /opt/strata/docker-entrypoint.sh ) &
+# Strata listens on 127.0.0.1 behind the load-balancer proxy (lb). In queue mode Runpod's proxy URL of the worker (https://<id>-8080.proxy.runpod.net,
+# see /api_direct) must reach Strata's port, so it listens on all interfaces; the API key (required above) protects it. STRATA_HOST overrides.
+if [ "$MODE" = lb ]; then SHOST="${STRATA_HOST:-127.0.0.1}"; else SHOST="${STRATA_HOST:-0.0.0.0}"; fi
+( PORT=8080 HOST="$SHOST" /opt/strata/docker-entrypoint.sh ) &
 SP=$!
 trap 'kill -TERM $SP 2>/dev/null; wait $SP' TERM INT
 if [ "$MODE" = lb ]; then
