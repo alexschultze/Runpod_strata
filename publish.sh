@@ -11,8 +11,9 @@ if [ ! -f "$ARCHIVE" ] && [ -f "$STRATA_HOME/engine/BUILD.json" ]; then
     tar -C "$(dirname "$STRATA_HOME")" --exclude="$(basename "$STRATA_HOME")/build" --exclude="$(basename "$STRATA_HOME")/build-vision" \
         -I "zstd -T0 -3" -cf "$ARCHIVE.tmp" "$(basename "$STRATA_HOME")" && mv "$ARCHIVE.tmp" "$ARCHIVE" && echo "$(date +%T) publish: archive $(du -h "$ARCHIVE" | cut -f1)"
     # what is in the archive, for humans (version from CMakeLists, tag/label, commit)
-    jq -n --arg v "${STRATA_VERSION:-}" --arg l "${LABEL:-}" --arg c "${SHA:-}" --arg a "${ARCH:-}" --arg i "${ISA:-}" --arg d "$(date -u +%FT%TZ)" \
-        '{strata_version: $v, strata_label: $l, strata_commit: $c, gpu_arch: $a, cpu_isa: $i, built: $d}' > "$STRATA_STORE/app-$KEY.json" 2>/dev/null
+    BYTES=$(du -sb --exclude=build --exclude=build-vision "$STRATA_HOME" 2>/dev/null | cut -f1)   # unpacked size: start.sh shows progress against it
+    jq -n --arg b "${BYTES:-0}" --arg v "${STRATA_VERSION:-}" --arg l "${LABEL:-}" --arg c "${SHA:-}" --arg a "${ARCH:-}" --arg i "${ISA:-}" --arg d "$(date -u +%FT%TZ)" \
+        '{bytes: ($b|tonumber), strata_version: $v, strata_label: $l, strata_commit: $c, gpu_arch: $a, cpu_isa: $i, built: $d}' > "$STRATA_STORE/app-$KEY.json" 2>/dev/null
     # keep the newest 3 archives per GPU architecture and CPU (Strata releases often, old ones pile up at ~0.5 GB each)
     ls -t "$STRATA_STORE"/app-sm"$ARCH"-"$ISA"-*.tar.zst 2>/dev/null | tail -n +4 | while read -r old; do
         rm -f "$old" "${old%.tar.zst}.json" && echo "$(date +%T) publish: removed old archive $(basename "$old")"

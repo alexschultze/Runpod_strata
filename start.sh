@@ -120,13 +120,38 @@ export ARCH ISA SHA LABEL KEY="sm${ARCH}-${ISA}-${LABEL:-unknown}"
 ARCHIVE="${STRATA_STORE:+$STRATA_STORE/app-$KEY.tar.zst}"   # zstd: the Strata folder is thousands of small files
 echo "start.sh: engine key $KEY"
 
+# Runs a command in the background and prints progress every 10 s: copied size (growth of <dest>), share of <total bytes> when known, speed, ETA.
+# progress_run <label> <dest dir> <total bytes or 0> <command...>   (returns the command's exit code)
+progress_run() {
+    local label=$1 dest=$2 total=$3 pid rc=0 t0=$SECONDS next=$((SECONDS + 10)) prev=0 prevt=$SECONDS cur
+    shift 3
+    "$@" & pid=$!
+    while kill -0 "$pid" 2>/dev/null; do
+        sleep 1
+        [ "$SECONDS" -ge "$next" ] || continue
+        next=$((SECONDS + 10))
+        cur=$(du -sb "$dest" 2>/dev/null | cut -f1); cur=${cur:-0}
+        awk -v l="$label" -v c="$cur" -v p="$prev" -v dt="$((SECONDS - prevt))" -v t="$total" -v e="$((SECONDS - t0))" 'BEGIN {
+            sp = (dt > 0 && c >= p) ? (c - p) / dt : 0
+            s = sprintf("start.sh: %s: %.1f", l, c / 2^30)
+            if (t > 0) { s = s sprintf(" / %.1f GiB (%d%%)", t / 2^30, c * 100 / t) } else { s = s " GiB" }
+            s = s sprintf(", %.0f MB/s, %ds elapsed", sp / 1e6, e)
+            if (t > 0 && sp > 0 && t > c) s = s sprintf(", ETA %ds", (t - c) / sp)
+            print s }'
+        prev=$cur; prevt=$SECONDS
+    done
+    wait "$pid" || rc=$?
+    return "$rc"
+}
+
 # ready = the Python environment and the engine are there AND they belong to this key (GPU architecture, CPU, Strata commit)
 app_ready() { [ -f "$STRATA_HOME/.venv/.strata-bootstrap-done" ] && [ -f "$STRATA_HOME/engine/BUILD.json" ] && [ "$(cat "$STRATA_HOME/.strata-key" 2>/dev/null)" = "$KEY" ]; }
 if ! app_ready; then
     if [ -n "$ARCHIVE" ] && [ -f "$ARCHIVE" ]; then
         echo "start.sh: restoring the engine from $ARCHIVE"
         rm -rf "${STRATA_HOME:?}"
-        tar -I zstd -xf "$ARCHIVE" -C "$STRATA_LOCAL"
+        TOTAL=$(jq -r '.bytes // 0' "${ARCHIVE%.tar.zst}.json" 2>/dev/null); TOTAL=${TOTAL:-0}
+        progress_run "restoring the engine" "$STRATA_HOME" "$TOTAL" tar -I zstd -xf "$ARCHIVE" -C "$STRATA_LOCAL"
     fi
 fi
 if ! app_ready; then   # no archive for this key: clone and prepare the Python environment; setup.py builds the engine below
@@ -178,10 +203,11 @@ esac
 avail_gib() { df -BG --output=avail "$1" | tail -1 | tr -dc 0-9; }
 if [ "$COPY_DATA_LOCAL" = yes ]; then
     if [ ! -f "$STRATA_DATA/.local-complete" ] && [ -n "$STRATA_STORE" ] && [ -f "$STRATA_STORE/data/.complete" ]; then
-        have=$(( $(du -sk "$STRATA_STORE/data" | cut -f1) / 1048576 + 10 ))
+        SRC_BYTES=$(du -sb "$STRATA_STORE/data" --exclude=logs | cut -f1)
+        have=$(( SRC_BYTES / 1073741824 + 10 ))
         [ "$(avail_gib "$STRATA_DATA")" -ge "$have" ] || fail_alive "the container disk is too small: $have GiB needed under $STRATA_DATA, $(avail_gib "$STRATA_DATA") GiB free. Raise the container disk or set COPY_DATA_LOCAL=no."
         echo "start.sh: copying the model data from $STRATA_STORE/data to $STRATA_DATA ($have GiB)"
-        rsync -a --partial --exclude=logs --exclude=.complete "$STRATA_STORE/data/" "$STRATA_DATA/"
+        progress_run "copying the model data" "$STRATA_DATA" "$SRC_BYTES" rsync -a --partial --exclude=logs --exclude=.complete "$STRATA_STORE/data/" "$STRATA_DATA/"
         touch "$STRATA_DATA/.local-complete"
     elif [ ! -f "$STRATA_DATA/.local-complete" ]; then
         [ "$(avail_gib "$STRATA_DATA")" -ge "$((NEED + 5))" ] || echo "start.sh: WARNING: $(avail_gib "$STRATA_DATA") GiB free under $STRATA_DATA, $MODEL needs about $NEED GiB (+$EXTRA GiB if the setup writes experts.bin): raise the container disk or set COPY_DATA_LOCAL=no" >&2
