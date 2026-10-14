@@ -70,6 +70,19 @@ STRATA_API_KEY=<secret> MODEL=IQ2_XS /opt/runpod/start.sh
 data folder and pushes it to the store, so the next start uses it. A calibration is valid for one GPU + CPU + RAM + model + context
 (Strata's hardware key), so run it once per pod type.
 
+## Cold start times
+
+What a start takes before the API answers (the first request after a Serverless worker was idle, or a new pod). Measured by the user on a Runpod pod unless noted:
+
+| Case | Time |
+|---|---|
+| Engine archive and model data on the volume (the normal case), incl. copying the model (about 73 GiB, `COPY_DATA_LOCAL=yes`) | **about 3 min 30 s** |
+| First start for a GPU architecture, no engine archive yet: build the engine | 3-4 min compile on top (measured earlier on a 3090 pod; archive is written for the next start) |
+| First start ever, no data on the volume: download the model | about 70 GB download on top, depends on the network (not measured here) |
+| Image pull on a host that does not have the image yet | not measured; the image is about 3.8 GiB compressed |
+
+Consequences for clients: a request that arrives while no worker is ready stays `IN_QUEUE` until Strata is loaded (the queue handler takes no job earlier), so set client timeouts to 10 minutes or more and prefer `/run` + `/status/<id>` polling over `/runsync`. Warm workers answer at once. With LiteLLM see the timeout settings in the user's proxy config (`request_timeout` and the model's `timeout`/`stream_timeout`, 600 s or more).
+
 ## Strata and the pod's limits
 
 - **RAM and CPU** are read from the host by Strata (`RAM: 1007 GB`, 128 cores) while the pod has a limit (cgroup: `memory.max`,
