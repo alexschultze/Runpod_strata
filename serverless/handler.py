@@ -6,6 +6,7 @@ Accepted job inputs:
     {"openai_route": "/v1/models"}                                                      -> GET
   our own format (/run, /runsync):
     {"path": "/v1/chat/completions", "body": {...}}   (path optional); "stream": true yields the parsed chunks
+    {"prompt": "Hello World"} (RunPod's default example) is sent as one user message, if there are no "messages"
 Only /v1/* is forwarded. The worker takes no jobs before Strata reports loaded (/health), so the queue only gets a worker that can answer."""
 import codecs
 import json
@@ -58,7 +59,12 @@ def parse(inp):
         return inp.get("openai_route") or DEFAULT_ROUTE, "POST", inp["openai_input"], True
     if "openai_route" in inp:
         return inp["openai_route"], "GET", None, True
-    return inp.get("path", DEFAULT_ROUTE), "POST", inp.get("body", inp), False
+    path = inp.get("path", DEFAULT_ROUTE)
+    body = inp.get("body", inp)
+    if path == DEFAULT_ROUTE and isinstance(body, dict) and "messages" not in body and isinstance(body.get("prompt"), str):
+        # RunPod's default example {"input": {"prompt": "Hello World"}}: becomes a single user message
+        body = {**{k: v for k, v in body.items() if k != "prompt"}, "messages": [{"role": "user", "content": body["prompt"]}]}
+    return path, "POST", body, False
 
 
 def handler(job):
