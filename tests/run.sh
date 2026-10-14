@@ -89,7 +89,7 @@ expect    "setup runs again"                      "FAKE SETUP reinstall=1"
 echo "5. same code reached as HEAD does not trigger REINSTALL"
 fresh_pod; run env; settle         # restores v0.1.2 from the archive
 run env STRATA_REF=HEAD; settle
-expect_no "no REINSTALL for the same commit"      "REINSTALL=1 for this start"
+expect_no "no commit-change REINSTALL for the same commit" "config was written by Strata commit"
 
 echo "6. calibrated config keeps its workers"
 fresh_pod; run env; settle
@@ -103,6 +103,12 @@ OUT=$(env -u API_KEY -u STRATA_API_KEY PATH="$T/bin:$PATH" STRATA_STORE="$T/stor
 expect    "without a key Strata is not started"   "NOT started"
 fresh_pod; run env -u STRATA_API_KEY API_KEY=alias; expect "API_KEY works as an alias" "API_KEY=alias"
 fresh_pod; run env LOW_RAM=resident; settle; expect "an explicit LOW_RAM is passed on" "LOW_RAM=resident"
+
+echo "8. config from the volume but no engine (no archive for this key): the setup must build it"
+fresh_pod; run env; settle; rm -f "$T"/store/app-*.tar.zst "$T"/store/app-*.json; fresh_pod
+run env; settle
+expect    "REINSTALL=1 when the engine binary is missing" "no engine binary .* REINSTALL=1"
+expect    "the setup ran"                         "FAKE SETUP reinstall=1"
 
 echo
 [ "$FAILS" = 0 ] && echo "all tests passed" || echo "$FAILS test(s) failed"

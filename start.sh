@@ -228,6 +228,12 @@ fi
 
 # Data and config written by another Strata version: let Strata's setup adapt them (REINSTALL=1 re-runs the setup with --yes; files
 # already on disk are found, not downloaded again). config/.built-with holds the Strata commit that wrote the config (the commit, not the tag: a tag and HEAD can be the same code) (post-setup.sh).
+# No engine binary but a config (copied from the volume, written by another pod): Strata's entrypoint skips the setup when the config exists,
+# so nothing would build the engine ("refers to missing files: .../engine/strata"). REINSTALL=1 runs the setup, which builds the engine.
+if [ ! -f "$STRATA_HOME/engine/strata" ] && [ -f "$STRATA_DATA/config/strata-$TAG.json" ] && [ "${REINSTALL:-0}" != 1 ]; then
+    export REINSTALL=1
+    echo "start.sh: no engine binary in $STRATA_HOME/engine yet: REINSTALL=1 for this start so the setup builds it (3-4 minutes; the model files already present are kept)"
+fi
 BUILT_WITH="$STRATA_DATA/config/.built-with"
 if [ -f "$BUILT_WITH" ] && [ -f "$STRATA_DATA/config/strata-$TAG.json" ] && [ -n "${SHA:-}" ] && [ "$(cat "$BUILT_WITH")" != "$SHA" ] && [ "${REINSTALL:-0}" != 1 ]; then
     export REINSTALL=1
