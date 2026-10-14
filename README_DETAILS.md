@@ -143,14 +143,15 @@ Not covered: AMD Instinct MI300X (needs Strata's HIP build). Strata documents te
 `tests/run.sh` runs `start.sh`, `post-setup.sh` and `publish.sh` against a fake Strata repo (no GPU, no download; needs root, it uses
 `/opt/runpod` and `/opt/strata`): key with the release tag, engine archive and restore, data copy, `COPY_DATA_LOCAL=no`, a new Strata version,
 a config without engine, the API key, calibration per hardware (`STRATA_CALIBRATE`, hardware change) and `STRATA_PARALLEL`.
-`tests/test_shim.py` tests the nvidia-smi shim, `tests/test_handler.py` the queue handler and `tests/test_bench_parallel.py` the parallel benchmark
-(fake servers). The workflow runs them before it builds; the image gets the tags `v0.1.<run>` and the commit SHA.
+`tests/test_shim.py` tests the nvidia-smi shim, `tests/test_handler.py` the queue handler and `tests/test_bench_parallel.py` the parallel benchmark and
+`tests/test_redirect.py` the redirect script (fake servers; the last one needs php with curl and is skipped without). The workflow runs them before it builds; the image gets the tags `v0.1.<run>` and the commit SHA.
 
 ## Structure
 
 - `Dockerfile`, `entry.sh`, `start.sh`, `sshd.sh`, `hwinfo.sh`, `post-setup.sh`, `publish.sh`, `update-scripts.sh`, `volume-check.sh` - image and start logic
 - `serverless/` - `proxy.py` (`/ping`, load balancer) and `handler.py` (queue endpoint, OpenAI route, `/api_direct`)
 - `scripts/` - benchmarks (`bench-local.sh`, `bench-parallel.sh`), storage tests, environment check, calibration, nvidia-smi shim; `strata/bench/` is `/app/bench/`
+- `tools/redirect/` - `strata.php` for your web server: one link that starts a Serverless worker and redirects to its website (see its README)
 - `strata/` - control tools: `runpod_ctl.py`, `bench/`, README
 - `.github/workflows/dev.yml` - tests, then build in GitHub Actions (started by hand)
 - `tests/` - tests of the start logic, shim, handler and benchmark client

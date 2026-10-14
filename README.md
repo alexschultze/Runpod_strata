@@ -105,6 +105,8 @@ At 1 $/hour and 150 tok/s the cost per million output tokens is about **3.70 $ a
 
 - **Security:** Strata is reachable on the worker's/pod's public Runpod proxy URL; the API key is the only protection. Never run without one.
 - **One request at a time** is Strata's default; others wait in its queue. The prompt cache reuses the start of a repeated prompt.
+- **One link to the website** (Serverless): `tools/redirect/strata.php` on your own web server starts a worker and redirects to its URL; the Runpod key stays on the
+  server ([tools/redirect/README.md](tools/redirect/README.md)).
 - **Serverless job input** `{"input": {"path": "/api_direct"}}` returns the worker's own URL (`https://<id>-8080.proxy.runpod.net/`, for the website). It
   keeps nothing alive; the worker still stops after the endpoint's idle timeout.
 - **A new GPU type** on the same volume: the engine is built once per GPU architecture and CPU, and calibration is per hardware. With
