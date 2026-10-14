@@ -34,7 +34,8 @@ STRATA_STORE="${STRATA_STORE:-${VOL:+$VOL/strata-store}}"
 STRATA_LOCAL="${STRATA_LOCAL:-/tmp}"
 STRATA_HOME="$STRATA_LOCAL/Strata"
 export STRATA_STORE STRATA_HOME STRATA_DATA="${STRATA_DATA:-$STRATA_LOCAL/Strata-data}"
-STRATA_REPO="${STRATA_REPO:-https://github.com/Niko1221/Strata.git}"
+STRATA_REPO="${STRATA_REPO:-Niko1221/Strata}"
+case "$STRATA_REPO" in */*) [[ "$STRATA_REPO" == *://* || "$STRATA_REPO" == git@* || "$STRATA_REPO" == /* ]] || STRATA_REPO="https://github.com/${STRATA_REPO%.git}.git" ;; esac   # owner/repo short form
 if [ -n "$STRATA_STORE" ]; then
     mkdir -p "$STRATA_STORE/data" "$STRATA_STORE/logs"
     export XDG_CONFIG_HOME="$STRATA_STORE/xdg"; mkdir -p "$XDG_CONFIG_HOME"   # Strata's settings.json (incl. calibrations) persists

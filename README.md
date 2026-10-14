@@ -46,7 +46,7 @@ STRATA_STRATA_API_KEY=<secret> MODEL=IQ2_XS /opt/runpod/start.sh
 | `STRATA_ENGINE_ARGS` | unset | Strata engine arguments merged into the config on every start (replaces same-named flags, takes precedence over the automatic `--pool-workers`). Calibration result in one variable, e.g. `--pcie-frac 1.00 --spec-min-p 0.70`; may also contain `--pool-workers N` and `--adapt-*` |
 | `COPY_DATA_LOCAL` | `yes` | copy model data from the store to `/tmp` (needs a big container disk), or use it on the volume |
 | `AUTO_START` | `no` | start Strata automatically (otherwise run `/opt/runpod/start.sh`) |
-| `STRATA_REF`, `STRATA_REPO` | `latest`, `Niko1221/Strata` | Strata to use: `latest` (newest release tag `v*`), a tag such as `v0.1.43.1` (pin), a branch or `HEAD` (key `head-<commit>`, rebuild on every upstream commit). A new version rebuilds the engine and runs Strata's setup again (`REINSTALL=1`) for the existing data |
+| `STRATA_REF`, `STRATA_REPO` | `latest`, `Niko1221/Strata` | `STRATA_REPO` is `owner/repo` or a full git URL (e.g. your fork `alexschultze/Strata`); Strata to use: `latest` (newest release tag `v*`), a tag such as `v0.1.43.1` (pin), a branch or `HEAD` (key `head-<commit>`, rebuild on every upstream commit). A new version rebuilds the engine and runs Strata's setup again (`REINSTALL=1`) for the existing data |
 | `POOL_WORKERS` | pod CPU quota - 3 (min 4) | `--pool-workers` written into a new config (Strata would use the host's physical cores and be throttled by the pod's CPU quota); `0` = leave it to Strata |
 | `RESIDENT_BUDGET_GIB` | pod RAM - 24 | `unsloth` only: GiB of experts kept in RAM |
 | `STRATA_STORE`, `STRATA_LOCAL` | `<volume>/strata-store`, `/tmp` | store and local base; with the local base also the config paths change |
