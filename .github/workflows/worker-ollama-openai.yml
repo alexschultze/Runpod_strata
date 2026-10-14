@@ -6,6 +6,13 @@ name: Build worker-ollama with OpenAI route fix
 
 on:
   workflow_dispatch:
+  # workflow_dispatch is only usable once this file is on the default branch, so
+  # also build when this file or the patch changes on the branch carrying the fix.
+  push:
+    branches: [claude/modest-allen-h8l7d0]
+    paths:
+      - .github/workflows/worker-ollama-openai.yml
+      - upstream-patches/worker-ollama-openai-route.patch
 
 permissions:
   contents: read
