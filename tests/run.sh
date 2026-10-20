@@ -66,6 +66,7 @@ fresh_pod() { rm -rf "${T:?}/local"; rm -f /opt/strata; }
 echo "1. first start on an empty store: key, setup, archive, data pushed, banner"
 run env; settle
 expect    "the volume report is printed first"     "---- volume ----"
+expect    "no engine for this key: says it is compiled" "none for this key: the engine is compiled"
 expect    "banner names GPU, VRAM and RAM"        "GPU +1x Fake GPU 24G, 24 GiB VRAM"
 expect    "key carries the latest tag"            "engine key sm86-[0-9a-f]{8}-v0\.1\.2"
 expect    "the setup ran, pool workers written"   'FAKE SETUP reinstall=0'
@@ -74,6 +75,7 @@ expect    "the setup ran, pool workers written"   'FAKE SETUP reinstall=0'
 
 echo "2. new pod, same store: restore instead of setup"
 fresh_pod; run env; settle
+expect    "the engine list marks the matching archive" "in the store: sm86-.*<== matches this start"
 expect    "engine restored from the archive"      "restoring the engine from .*\.tar\.zst"
 expect    "data copied from the store"            "copying the model data from"
 expect_no "no setup this time"                    "FAKE SETUP"

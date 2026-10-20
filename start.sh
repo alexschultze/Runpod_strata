@@ -160,6 +160,27 @@ strata_layout_fail() {
 
 # ready = the Python environment and the engine are there AND they belong to this key (GPU architecture, CPU, Strata commit)
 app_ready() { [ -f "$STRATA_HOME/.venv/.strata-bootstrap-done" ] && [ -f "$STRATA_HOME/engine/BUILD.json" ] && [ -f "$STRATA_HOME/engine/strata" ] && [ "$(cat "$STRATA_HOME/.strata-key" 2>/dev/null)" = "$KEY" ]; }
+# which engines exist, and which one this start uses
+echo "start.sh: ---- engines ----"
+echo "start.sh: this start needs: $KEY"
+if [ -n "$STRATA_STORE" ]; then
+    n=0
+    for f in "$STRATA_STORE"/app-*.tar.zst; do
+        [ -f "$f" ] || continue
+        n=$((n + 1)); k=$(basename "$f" .tar.zst); k=${k#app-}; j="${f%.tar.zst}.json"; info=""
+        [ -f "$j" ] && info=$(jq -r '"Strata \(.strata_version // "?"), commit \(.strata_commit // "?"), built \(.built // "?")"' "$j" 2>/dev/null)
+        echo "start.sh:   in the store: $k  $(du -h "$f" 2>/dev/null | cut -f1)  ${info}$([ "$k" = "$KEY" ] && echo '  <== matches this start')"
+    done
+    [ "$n" = 0 ] && echo "start.sh:   in the store: no engine archive"
+    [ -f "$ARCHIVE" ] || echo "start.sh:   none for this key: the engine is compiled (3-4 minutes) and archived afterwards"
+fi
+if [ -f "$STRATA_HOME/.strata-key" ]; then
+    echo "start.sh:   local $STRATA_HOME: key $(cat "$STRATA_HOME/.strata-key"), $(app_ready && echo 'ready, used as it is' || echo 'not usable for this key')"
+else
+    echo "start.sh:   local: no engine yet"
+fi
+echo "start.sh: -----------------"
+
 if ! app_ready; then
     if [ -n "$ARCHIVE" ] && [ -f "$ARCHIVE" ]; then
         echo "start.sh: restoring the engine from $ARCHIVE"

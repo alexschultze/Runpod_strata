@@ -76,8 +76,7 @@ volume_report() {
     elif [ ! -d "$store" ]; then echo "start.sh: store $store does not exist yet (the first start creates it)"
     else
         echo "start.sh: store $store:"
-        for f in "$store"/app-*.tar.zst; do [ -f "$f" ] && echo "start.sh:   engine archive $(basename "$f")  $(du -h "$f" 2>/dev/null | cut -f1)  $(date -r "$f" +%F 2>/dev/null)"; done
-        [ -f "$(ls "$store"/app-*.tar.zst 2>/dev/null | head -1)" ] || echo "start.sh:   no engine archive yet (the first start on this hardware compiles the engine)"
+        echo "start.sh:   engine archives: $(ls "$store"/app-*.tar.zst 2>/dev/null | wc -l) (listed under 'engines' below)"
         if [ -d "$store/data" ]; then
             echo "start.sh:   data/: $(timeout 20 ls -A "$store/data" 2>/dev/null | tr '\n' ' ')$([ -f "$store/data/.complete" ] && echo '(complete)' || echo '(not marked complete)')"
             [ -d "$store/data/models" ] && echo "start.sh:   data/models: $(timeout 20 ls -lh "$store/data/models" 2>/dev/null | awk 'NR>1 {printf "%s (%s) ", $9, $5}')"
