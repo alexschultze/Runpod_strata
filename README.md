@@ -18,7 +18,7 @@ ghcr.io/alexschultze/strata-runpod:<tag>        # the tag of the latest successf
    `latest-cuda13`; pin a version such as `0.2.1-cuda13` for a reproducible build). No compile on the pod: the 3-4 minutes and the engine archives of the 0.1 line are gone.
 2. **Serverless: use a network volume** in the same data center. Model, presets and tuning are kept there (`<volume>/strata-store/v2`) and copied to the local disk
    at start, so a new worker does not download or tune again.
-3. **Tuning is per kind of card:** `STRATA_CALIBRATE=yes` runs Strata's quick tuning (about 20 minutes, once) for a preset that is named after the GPU
+3. **Tuning is per kind of card:** `TUNE=quick` runs Strata's quick tuning (about 20 minutes, once) for a preset that is named after the GPU
    (`docker-<gpu>-<vram>g`), so every card type is tuned once and keeps its result. Without it nothing is tuned.
 4. **Not measured yet on this branch:** start times, speed, the Docker options Strata recommends (`--ulimit memlock`, `--shm-size`) on Runpod, and which
    GPU architectures the engine in the image covers (check with `strata components engine` in the container; the start log prints it).
@@ -31,7 +31,7 @@ ghcr.io/alexschultze/strata-runpod:<tag>        # the tag of the latest successf
 | **RAM** | about 48 GB or more for the recommended model (IQ2_XS). Strata plans from the host's RAM, so it warns about a pod memory limit |
 | **Local disk (container disk)** | **85 GB** for the recommended model. The model data (73 GiB) is copied there for speed |
 | **Network volume** | **in the same data center as the pod or endpoint.** It stores the model, presets and tuning (`<volume>/strata-store/v2`), so a restart or a new worker does not download or tune again |
-| **API key** | a secret of your own (`STRATA_API_KEY`). Without it nothing starts |
+| **API key** | a secret of your own (`API_KEY`). Without it nothing starts |
 
 ## Quick start
 
@@ -49,13 +49,13 @@ yet). Set client timeouts to 10-15 minutes and prefer `/run` + `/status/<id>` ov
 
 | Variable | Default | What it does |
 |---|---|---|
-| `STRATA_API_KEY` | – (**required**) | the key clients send as `Authorization: Bearer ...` (alias `API_KEY`, Strata's own name). Put it in Runpod Secrets, never in the image or repo. Use 16+ characters |
+| `API_KEY` | – (**required**) | the key clients send as `Authorization: Bearer ...` (Strata's own name). Put it in Runpod Secrets, never in the image or repo. Use 16+ characters |
 | `MODEL` | `IQ2_XS` | the model size: `IQ2_XS` (recommended), `Q2_0`, `IQ3_XXS`, `IQ3_S`, ... (Strata's list); empty would let Strata choose |
 | `FAMILY` | unset | `qwen`, `coder`, ... only when a size exists in several families |
 | `CONTEXT` | `32768` | context length in tokens (Strata alone would take the largest that fits; ours is smaller to keep VRAM for the experts) |
 | `COPY_DATA_LOCAL` | `yes` | `yes`: copy the store on the volume to the local disk at start (needs about 85 GB container disk for IQ2_XS). `no`: the model files stay on the volume (slower to run) |
-| `STRATA_CALIBRATE` | `no` | `no`: no tuning. `yes`: Strata's quick tuning once for this kind of card (`TUNE=quick`). `force`: tune again (`RETUNE=1`). Or set `TUNE` yourself |
-| `STRATA_PARALLEL` | unset | requests answered together (Strata's `PARALLEL`, 1-8). Leave unset unless you measured a gain |
+| `TUNE` | `skip` | Strata's own: `skip` (no tuning), `quick` (up to about 20 minutes, once per preset) or `thorough`. `RETUNE=1` tunes again |
+| `PARALLEL` | unset | Strata's own: requests answered together (1-8). Leave unset unless you measured a gain |
 | `STRATA_SET` | unset | advanced engine settings, space separated `key=value` (Strata's `--set`), for example `prefill=65536` |
 | `PRESET` | `docker-<gpu>-<vram>g` | Strata's preset name; the default gives every card type its own preset and tuning |
 | `AUTO_START` | `no` | Pods only: `yes` starts Strata without you running `start.sh` |
@@ -63,6 +63,7 @@ yet). Set client timeouts to 10-15 minutes and prefer `/run` + `/status/<id>` ov
 | `SCRIPTS_REF` | unset | a git branch or tag of this repo: the scripts are pulled from it at start instead of the ones in the image |
 | `MODE` | `pod` (Serverless: `queue`) | `pod`, `queue` (Runpod queue handler) or `lb` (load-balancer proxy on `LB_PORT`, default 8000) |
 
+Our former names `STRATA_API_KEY`, `STRATA_PARALLEL`, `STRATA_CALIBRATE` are gone (the start reports them; use `API_KEY`, `PARALLEL`, `TUNE`).
 Gone from the 0.1 line (ignored with a warning): `LOW_RAM`, `REINSTALL`, `RESIDENT_BUDGET_GIB`, `STRATA_REF`, `STRATA_REPO`, `STRATA_ENGINE_ARGS`, `POOL_WORKERS`.
 Strata 0.2 plans RAM and the engine itself.
 
@@ -74,7 +75,7 @@ All other variables are listed in [README_DETAILS.md](README_DETAILS.md).
 |---|---|
 | Worker starts, model and presets on the volume, copied to the local disk | not measured on this branch (the 0.1 line took about 3.5 minutes with the copy; there the engine restore is gone now) |
 | Very first start, no model data on the volume | the model download (about 70 GB, not measured) plus Strata's preparation of the pack |
-| `STRATA_CALIBRATE=yes` on a card type nobody has tuned | + up to about 20 minutes (Strata's quick tuning), once per card type |
+| `TUNE=quick` on a card type nobody has tuned | + up to about 20 minutes (Strata's quick tuning), once per card type |
 | Image not yet cached on the host | + pull of the image (Strata's engine image is about 640 MB to download, ours adds SSH, Python and tools; not measured) |
 
 At start the log shows an **info block** (GPU, VRAM, CPU, RAM, Runpod ids, URL), the **volume** and the **engine** of the image, then a progress line every 10 s while copying.
@@ -84,7 +85,7 @@ At start the log shows an **info block** (GPU, VRAM, CPU, RAM, Runpod ids, URL),
 Decode speed (Strata, IQ2_XS): **about 150 tok/s** on an RTX PRO 4500 Blackwell (32 GB) with a calibration for that card
 (`--pcie-frac 1.00 --spec-min-p 0.70`, measured 163 tok/s by the calibration). **About 60 tok/s** on an L4 (22 GB) running with the settings
 calibrated for the Blackwell card: the cause is probably the smaller card and those settings, not confirmed yet (batch slots were set to 1 in that run).
-Strata's docs say batch slots (`STRATA_PARALLEL`) can slow a single request down where the experts do not fit in VRAM; we measured no gain.
+Strata's docs say batch slots (`PARALLEL`) can slow a single request down where the experts do not fit in VRAM; we measured no gain.
 
 Storage (fio, 1 MiB blocks unless noted; measured on pods by the project owner):
 
@@ -110,7 +111,7 @@ At 1 $/hour and 150 tok/s the cost per million output tokens is about **3.70 $ a
 - **One request at a time** is Strata's default; others wait in its queue. The prompt cache reuses the start of a repeated prompt.
 - **Serverless job input** `{"input": {"path": "/api_direct"}}` returns the worker's own URL (`https://<id>-8080.proxy.runpod.net/`, for the website). It
   keeps nothing alive; the worker still stops after the endpoint's idle timeout.
-- **A new GPU type** on the same volume: it gets its own preset (`docker-<gpu>-<vram>g`), so with `STRATA_CALIBRATE=yes` its first start runs Strata's quick tuning once
+- **A new GPU type** on the same volume: it gets its own preset (`docker-<gpu>-<vram>g`), so with `TUNE=quick` its first start runs Strata's quick tuning once
   and keeps the result. Whether the engine in the image supports the card: the start log prints `strata components engine`.
 - **Strata reads the host's RAM,** not the pod's limit, when it plans (its entrypoint warns about a memory limit). `LOW_RAM` no longer exists in 0.2.
 - **Docker options Strata recommends** (`--ulimit memlock=-1:-1`, `--shm-size 2g`, `--stop-timeout 120`) cannot always be set on Runpod: untested there.

@@ -90,12 +90,12 @@ out = run({"path": "/api_direct"})
 check("/api_direct: the worker's URL", out == [{"url": "https://abc123-%s.proxy.runpod.net/" % os.environ["STRATA_PORT"], "worker_id": "abc123"}])
 t0 = time.time(); out = run({"path": "/api_direct", "hold": 5})
 check("no hold: the job ends at once, whatever 'hold' says", time.time() - t0 < 2 and "hold_seconds" not in out[0])
-check("slots: 1 without a report and without STRATA_PARALLEL", h.serving_slots() == 1)
-os.environ["STRATA_PARALLEL"] = "4"
-check("slots: STRATA_PARALLEL when Strata reports nothing", h.serving_slots() == 4)
+check("slots: 1 without a report and without PARALLEL", h.serving_slots() == 1)
+os.environ["PARALLEL"] = "4"
+check("slots: PARALLEL when Strata reports nothing", h.serving_slots() == 4)
 Fake.serving = 2
 check("slots: what Strata serves wins (it may run fewer than asked)", h.serving_slots() == 2)
-os.environ["STRATA_PARALLEL"] = "x"; Fake.serving = 0
-check("slots: a bad STRATA_PARALLEL means 1", h.serving_slots() == 1)
+os.environ["PARALLEL"] = "x"; Fake.serving = 0
+check("slots: a bad PARALLEL means 1", h.serving_slots() == 1)
 print("all tests passed" if not FAILS else "%d test(s) failed" % FAILS)
 raise SystemExit(FAILS)

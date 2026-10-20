@@ -37,8 +37,8 @@ def wait_ready(timeout=float(os.environ.get("READY_TIMEOUT", "3600"))):
 
 
 def serving_slots():
-    """How many requests Strata decodes together (batch slots, STRATA_PARALLEL): what GET /v1/status reports as concurrency.serving,
-    else STRATA_PARALLEL, else 1. The worker takes that many jobs at once; the rest wait in RunPod's queue."""
+    """How many requests Strata decodes together (batch slots, PARALLEL): what GET /v1/status reports as concurrency.serving,
+    else PARALLEL, else 1. The worker takes that many jobs at once; the rest wait in RunPod's queue."""
     try:
         n = int(requests.get(BASE + "/v1/status", headers=H, timeout=5).json()["concurrency"]["serving"])
         if n >= 1:
@@ -46,7 +46,7 @@ def serving_slots():
     except Exception:
         pass
     try:
-        return max(1, int(os.environ.get("STRATA_PARALLEL", "1")))
+        return max(1, int(os.environ.get("PARALLEL", "1")))
     except ValueError:
         return 1
 

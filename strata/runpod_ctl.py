@@ -47,7 +47,7 @@ def env_for(a, mode):
         k, _, v = kv.partition("=")
         e[k] = v
     if a.api_key_strata:
-        e["STRATA_API_KEY"] = a.api_key_strata
+        e["API_KEY"] = a.api_key_strata
     return e
 
 

@@ -6,10 +6,9 @@
 #   2. Strata's own entrypoint (/opt/strata/entrypoint.sh) starts the server (MODE pod); queue and lb run it in the background beside our handler / proxy.
 #
 # Our variables, mapped to Strata's (see README_DETAILS.md):
-#   STRATA_API_KEY (alias API_KEY)  required; ALLOW_NO_API_KEY=1 lets Strata make a key itself
+#   API_KEY  required (Strata's own name; put it in Runpod Secrets); ALLOW_NO_API_KEY=1 lets Strata make a key itself
 #   MODEL=IQ2_XS  CONTEXT=32768  FAMILY  KV  VISION  GPU/GPUS  PORT  MODEL_PATH   the same names as in Strata's image (CONTEXT default is ours: Strata would take the largest that fits)
-#   STRATA_PARALLEL=N   -> PARALLEL=N (requests answered together)
-#   STRATA_CALIBRATE=no|yes|force   -> TUNE: no = skip, yes = TUNE=quick (done once per preset), force = TUNE=quick RETUNE=1
+#   PARALLEL, TUNE (quick|thorough|skip, default skip: no tuning), RETUNE=1   Strata's own, passed through unchanged
 #   PRESET   Strata's preset name; default docker-<gpu>-<vram>g, so every kind of card gets its own preset and its own tuning
 #   STRATA_SET   advanced engine settings, space separated key=value (replaces STRATA_ENGINE_ARGS)
 #   COPY_DATA_LOCAL=yes|no   STRATA_STORE (default <volume>/strata-store/v2)   MODE=pod|lb|queue   LB_PORT=8000 (lb proxy)
@@ -40,11 +39,15 @@ mkdir -p "$DATA"
 [ -n "$STRATA_STORE" ] && [ -x "$HERE/volume-check.sh" ] && "$HERE/volume-check.sh" "$STRATA_STORE" || true
 
 fail_alive() { echo "start.sh: $*" >&2; exec sleep infinity; }   # keeps the pod (and sshd) up so you can look around
-API_KEY="${STRATA_API_KEY:-${API_KEY:-}}"; export API_KEY
+API_KEY="${API_KEY:-}"; export API_KEY
 if [ -z "$API_KEY" ] && [ "${ALLOW_NO_API_KEY:-0}" != 1 ]; then
-    fail_alive "STRATA_API_KEY is not set: Strata is NOT started (it must not run without a key). Set it (Runpod Secrets) and run /opt/runpod/start.sh again."
+    fail_alive "API_KEY is not set: Strata is NOT started (it must not run without a key). Set it (Runpod Secrets) and run /opt/runpod/start.sh again."
 fi
 [ -n "$API_KEY" ] && [ "${#API_KEY}" -lt 16 ] && echo "start.sh: WARNING: the API key is short (${#API_KEY} characters), use 16 or more" >&2
+for p in STRATA_API_KEY:API_KEY STRATA_PARALLEL:PARALLEL STRATA_CALIBRATE:TUNE; do   # our former names, now Strata's own
+    eval "x=\${${p%%:*}:-}"
+    [ -n "$x" ] && echo "start.sh: ${p%%:*} no longer exists: use ${p##*:} (Strata's name)" >&2
+done
 for v in LOW_RAM REINSTALL RESIDENT_BUDGET_GIB HOST CONFIG STRATA_REF STRATA_REPO STRATA_ENGINE_ARGS POOL_WORKERS; do
     eval "x=\${$v:-}"
     [ -n "$x" ] && echo "start.sh: $v is from the Strata 0.1 image and is ignored (Strata 0.2 plans RAM and the engine itself; STRATA_SET=key=value for engine settings)" >&2
@@ -92,13 +95,6 @@ elif [ -n "$STRATA_STORE" ] && [ "$COPY_DATA_LOCAL" = no ]; then   # the big fil
 fi
 
 # ---- Strata's settings from ours ------------------------------------------------------------------------------------------
-[ -n "${STRATA_PARALLEL:-}" ] && [ -z "${PARALLEL:-}" ] && export PARALLEL="$STRATA_PARALLEL"
-if [ -z "${TUNE:-}" ]; then
-    case "${STRATA_CALIBRATE:-no}" in
-        yes)   export TUNE=quick ;;
-        force) export TUNE=quick RETUNE=1 ;;
-    esac
-fi
 if [ -z "${PRESET:-}" ]; then PRESET="docker-$(hw_slug "$GPU_NAME")-${GPU_VRAM_GIB}g"; fi   # one preset (and so one tuning) per kind of card
 export PRESET
 echo "start.sh: MODE=$MODE MODEL=$MODEL CONTEXT=$CONTEXT PRESET=$PRESET${TUNE:+ TUNE=$TUNE}${RETUNE:+ RETUNE=$RETUNE}${PARALLEL:+ PARALLEL=$PARALLEL}${STRATA_SET:+ STRATA_SET=\"$STRATA_SET\"} COPY_DATA_LOCAL=$COPY_DATA_LOCAL STORE=${STRATA_STORE:--} DATA=$DATA"

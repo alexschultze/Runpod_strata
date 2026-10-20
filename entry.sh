@@ -8,7 +8,7 @@
 if [ "${AUTO_START:-no}" = yes ] || [ "${MODE:-pod}" != pod ]; then exec /opt/runpod/start.sh; fi
 cat <<MSG
 entry.sh: nothing is started (AUTO_START is not yes). To copy the data from the volume and start Strata run, inside tmux:
-  STRATA_API_KEY=<secret> /opt/runpod/start.sh
-  (variables: MODEL, CONTEXT, PARALLEL or STRATA_PARALLEL, STRATA_CALIBRATE, COPY_DATA_LOCAL, ...; see the README)
+  API_KEY=<secret> /opt/runpod/start.sh
+  (variables: MODEL, CONTEXT, PARALLEL, TUNE, COPY_DATA_LOCAL, ...; see the README)
 MSG
 exec sleep infinity

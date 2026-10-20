@@ -25,7 +25,7 @@ for a Pod and for a Serverless endpoint (queue or load balancer).
 
 ## Key Facts for Strata
 
-- API on :8080, health at `/health`; one sequence at a time unless `STRATA_PARALLEL` (batch slots) is set.
+- API on :8080, health at `/health`; one sequence at a time unless `PARALLEL` (batch slots) is set.
 - State in `/data` (local disk: model, pack, presets, tuning), stored on the volume (`<volume>/strata-store/v2`: `/workspace` on a Pod,
   `/runpod-volume` on Serverless). Tuning: Strata's preset, named per GPU (`docker-<gpu>-<vram>g`).
 - RAM: about 48 GB or more for IQ2_XS; Strata plans from the host's RAM and warns about a pod memory limit.

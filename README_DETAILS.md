@@ -18,7 +18,7 @@ ENTRYPOINT tini -- /opt/runpod/entry.sh                # sshd, then (AUTO_START 
   `<volume>/strata-store/v2/data` to `/data` (rsync with progress, `COPY_DATA_LOCAL=yes`) or links `/data/Strata-data` to the volume (`no`), and starts Strata's
   entrypoint (`exec` in pod mode; in the background beside `handler.py` / `proxy.py` for `queue` / `lb`, Strata on port 8080, the proxy on `LB_PORT`).
 - **`sync.sh`:** once `/health` says `loaded: true`, an incremental rsync of `/data` to the store (without `state/api-key` and logs), at idle priority.
-- **Tuning per card type:** Strata keeps tuning in the preset; the preset name defaults to `docker-<gpu>-<vram>g`. `STRATA_CALIBRATE=yes` -> `TUNE=quick`
+- **Tuning per card type:** Strata keeps tuning in the preset; the preset name defaults to `docker-<gpu>-<vram>g`. `TUNE=quick`
   (Strata tunes once per preset), `force` -> `TUNE=quick RETUNE=1`. This relies on Strata keeping tuning per preset: not verified.
 - **Gone:** engine archives, the hook, `post-setup.sh`, `publish.sh`, `calibrate.sh`, `STRATA_REF`/`STRATA_REPO`, `LOW_RAM`, `POOL_WORKERS`, `STRATA_ENGINE_ARGS`.
 

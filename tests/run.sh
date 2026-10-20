@@ -28,7 +28,7 @@ run() {   # env assignments for this run; the output goes to $OUT. A new DATA_DI
     D=$(mktemp -d "$T/dataXXXX")
     OUT=$(env -u LOW_RAM -u API_KEY -u STRATA_API_KEY -u TUNE -u RETUNE -u PARALLEL -u STRATA_PARALLEL -u STRATA_CALIBRATE -u STRATA_SET -u PRESET -u COPY_DATA_LOCAL -u MODE \
         PATH="$T/bin:$PATH" STRATA_ENTRYPOINT="$T/entry-fake.sh" STRATA_BIN="$T/bin/strata" DATA_DIR="$D" STRATA_STORE="$T/store" SYNC_WAIT=no \
-        STRATA_API_KEY=k1234567890123456 "$@" timeout 120 bash "$HERE/start.sh" 2>&1)
+        API_KEY=k1234567890123456 "$@" timeout 120 bash "$HERE/start.sh" 2>&1)
 }
 settle() { sleep 1; for _ in $(seq 1 60); do pgrep -f "$HERE/sync.sh" >/dev/null || return 0; sleep 0.5; done; }
 
@@ -46,12 +46,14 @@ OUT=$(env -u API_KEY -u STRATA_API_KEY PATH="$T/bin:$PATH" STRATA_ENTRYPOINT="$T
 expect    "without an API key Strata is not started" "NOT started"
 
 echo "2. our variables mapped to Strata's"
-run env STRATA_CALIBRATE=yes STRATA_PARALLEL=2 STRATA_SET="prefill=65536"; settle
+run env TUNE=quick PARALLEL=2 STRATA_SET="prefill=65536"; settle
 expect    "calibrate yes: tune quick"             "TUNE=quick RETUNE=unset"
 expect    "parallel"                              "PARALLEL=2"
 expect    "advanced settings pass through"        "STRATA_SET=prefill=65536"
-run env STRATA_CALIBRATE=force; settle
-expect    "calibrate force: tune again"           "TUNE=quick RETUNE=1"
+run env TUNE=quick RETUNE=1; settle
+expect    "tune again"                            "TUNE=quick RETUNE=1"
+run env STRATA_CALIBRATE=yes STRATA_PARALLEL=2; settle
+expect    "the former names are reported"         "STRATA_CALIBRATE no longer exists: use TUNE"
 run env PRESET=mine LOW_RAM=on; settle
 expect    "an own preset name wins"               "PRESET=mine"
 expect    "LOW_RAM is said to be ignored"         "LOW_RAM is from the Strata 0.1 image and is ignored"
@@ -63,7 +65,7 @@ LD=$(printf '%s' "$OUT" | sed -n 's/.*DATA=\(.*\)$/\1/p' | head -1)
 [ -f "$LD/state/presets.json" ] && ok "presets and tuning are local" || bad "state not copied"
 [ ! -e "$LD/state/api-key" ] && ok "the API key file is not copied" || bad "api-key was copied"
 expect    "copy progress logging is on"           "copying the data from"
-OUT=$(env PATH="$T/bin:$PATH" STRATA_ENTRYPOINT="$T/entry-fake.sh" STRATA_BIN="$T/bin/strata" DATA_DIR="$LD" STRATA_STORE="$T/store" SYNC_WAIT=no STRATA_API_KEY=k1234567890123456 timeout 120 bash "$HERE/start.sh" 2>&1)
+OUT=$(env PATH="$T/bin:$PATH" STRATA_ENTRYPOINT="$T/entry-fake.sh" STRATA_BIN="$T/bin/strata" DATA_DIR="$LD" STRATA_STORE="$T/store" SYNC_WAIT=no API_KEY=k1234567890123456 timeout 120 bash "$HERE/start.sh" 2>&1)
 expect_no "a second start does not copy again"    "copying the data from"
 
 echo "4. COPY_DATA_LOCAL=no: the big files stay on the volume"
