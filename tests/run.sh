@@ -52,6 +52,7 @@ G="git -c user.email=t@t -c user.name=t"
 git add -A && $G commit -qm v1 && git tag v0.1.1
 printf 'project(strata VERSION 0.1.2 LANGUAGES CXX)\n' > CMakeLists.txt
 $G commit -qam v2 && git tag v0.1.2
+git checkout -q -b layout2 && git rm -q docker-entrypoint.sh && $G commit -qm 'v0.2 layout' && git tag v0.2.0 && git checkout -q -   # a release of Strata's new layout
 cd "$HERE" || exit 1
 
 run() {   # env assignments for this run; the output goes to $OUT
@@ -64,6 +65,7 @@ fresh_pod() { rm -rf "${T:?}/local"; rm -f /opt/strata; }
 
 echo "1. first start on an empty store: key, setup, archive, data pushed, banner"
 run env; settle
+expect    "the volume report is printed first"     "---- volume ----"
 expect    "banner names GPU, VRAM and RAM"        "GPU +1x Fake GPU 24G, 24 GiB VRAM"
 expect    "key carries the latest tag"            "engine key sm86-[0-9a-f]{8}-v0\.1\.2"
 expect    "the setup ran, pool workers written"   'FAKE SETUP reinstall=0'
@@ -124,6 +126,15 @@ expect    "back on the first hardware: setup again, its saved values return" '"-
 rm -f "$T/local/Strata-data/config/.hw-key"
 run env $CAL; settle
 expect    "calibrated values of unknown hardware: setup again once" "unknown hardware.*REINSTALL=1"
+
+echo "9. a Strata release without docker-entrypoint.sh (0.2 layout): clear error; latest stays on the 0.1 line"
+fresh_pod
+OUT=$(env -u LOW_RAM -u API_KEY PATH="$T/bin:$PATH" STRATA_STORE="$T/store" STRATA_LOCAL="$T/local" STRATA_REPO="file://$T/upstream" \
+    MODEL=IQ2_XS PORT=8080 POOL_WORKERS=6 STRATA_API_KEY=k STRATA_REF=v0.2.0 timeout 60 bash "$HERE/start.sh" 2>&1)
+expect    "explains the missing docker-entrypoint.sh" "has no docker-entrypoint.sh"
+expect    "names the version that works"          "STRATA_REF=v0\.1\.45"
+fresh_pod; run env; settle
+expect    "latest ignores the 0.2 tag"            "engine key sm86-[0-9a-f]{8}-v0\.1\.2"
 
 echo "8. STRATA_PARALLEL: N sets --batch N, 1 removes it"
 fresh_pod; run env STRATA_PARALLEL=3; settle

@@ -57,7 +57,7 @@ on hardware nobody has run before (see "How long does a start take"). Set client
 | `LOW_RAM` | unset (Strata decides) | `resident`, `mmap`, `on`, `off`: only when the pod has much less RAM than the host reports |
 | `AUTO_START` | `no` | Pods only: `yes` starts Strata without you running `start.sh` |
 | `SSH_PUBLIC_KEY` | – | your public key for SSH into the pod (a Runpod `PUBLIC_KEY` also works) |
-| `STRATA_REF` | `latest` | Strata version: `latest` release, a tag such as `v0.1.44.1`, a branch or `HEAD` |
+| `STRATA_REF` | `latest` | Strata version: `latest` = the newest **0.1** release (`v0.1.45` at the moment; Strata 0.2 has another layout and is **not supported yet**), a tag such as `v0.1.44.1`, a branch or `HEAD` |
 | `STRATA_REPO` | `Niko1221/Strata` | where Strata is cloned from (`owner/repo` or a git URL, for a fork) |
 | `SCRIPTS_REF` | unset | a git branch or tag of this repo: the scripts are pulled from it at start instead of the ones in the image (no rebuild for script changes) |
 | `MODE` | `pod` (Serverless: `queue`) | `pod`, `queue` (Runpod queue handler) or `lb` (load-balancer proxy) |
@@ -110,4 +110,6 @@ At 1 $/hour and 150 tok/s the cost per million output tokens is about **3.70 $ a
 - **A new GPU type** on the same volume: the engine is built once per GPU architecture and CPU, and calibration is per hardware. With
   `STRATA_CALIBRATE=yes` the first start on new hardware calibrates by itself.
 - **Strata reads the host's RAM,** not the pod's limit, when it sets itself up. The start warns if the limit looks too small for the model; then set `LOW_RAM`.
+- **Strata 0.2 is not supported yet:** since `v0.2.0-beta` (and `main` since 2026-10-20) Strata has no `docker-entrypoint.sh`. `latest` therefore stays on the 0.1 line;
+  starting a 0.2 tag stops with a message that names `STRATA_REF=v0.1.45`.
 - **Debugging:** SSH in (`SSH_PUBLIC_KEY`), logs are in `/workspace/strata-store/logs/` and the engine log is linked there.

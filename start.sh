@@ -39,6 +39,7 @@ STRATA_HOME="$STRATA_LOCAL/Strata"
 export STRATA_STORE STRATA_HOME STRATA_DATA="${STRATA_DATA:-$STRATA_LOCAL/Strata-data}"
 STRATA_REPO="${STRATA_REPO:-Niko1221/Strata}"
 case "$STRATA_REPO" in */*) [[ "$STRATA_REPO" == *://* || "$STRATA_REPO" == git@* || "$STRATA_REPO" == /* ]] || STRATA_REPO="https://github.com/${STRATA_REPO%.git}.git" ;; esac   # owner/repo short form
+volume_report   # what the volume holds, before anything is created
 if [ -n "$STRATA_STORE" ]; then
     mkdir -p "$STRATA_STORE/data" "$STRATA_STORE/logs"
     export XDG_CONFIG_HOME="$STRATA_STORE/xdg"; mkdir -p "$XDG_CONFIG_HOME"   # Strata's settings.json (incl. calibrations) persists
@@ -101,11 +102,12 @@ fail_alive() { echo "start.sh: $*" >&2; exec sleep infinity; }   # keeps the pod
 gpu_arch() { nvidia-smi --query-gpu=compute_cap --format=csv,noheader 2>/dev/null | tr -d '. ' | sort -u | paste -sd+ -; }
 cpu_isa()  { grep -m1 '^flags' /proc/cpuinfo | tr ' ' '\n' | grep -E '^(avx|avx2|fma|f16c|bmi1|bmi2|avx512.*|avx_vnni|amx.*)$' | sort | tr '\n' ' ' | sha1sum | cut -c1-8; }
 ARCH=$(gpu_arch); ARCH="${ARCH:-nogpu}"; ISA=$(cpu_isa)
-# Which Strata: STRATA_REF = latest (default: the newest release tag v*), a tag (v0.1.43.1), a branch, or HEAD. The key carries the tag
+# Which Strata: STRATA_REF = latest (default: the newest release tag of the 0.1 line, STRATA_TAG_PATTERN=v0.1.*: Strata 0.2 has another layout without
+# docker-entrypoint.sh, not supported yet), a tag (v0.1.43.1), a branch, or HEAD. The key carries the tag
 # (stable, readable); for a branch or HEAD it carries branch-<commit>, because those move.
 REF="${STRATA_REF:-latest}"
 if [ "$REF" = latest ]; then
-    REF=$(git ls-remote --tags --refs --sort=-v:refname "$STRATA_REPO" 'v*' 2>/dev/null | head -1 | sed 's#.*refs/tags/##')
+    REF=$(git ls-remote --tags --refs --sort=-v:refname "$STRATA_REPO" "${STRATA_TAG_PATTERN:-v0.1.*}" 2>/dev/null | head -1 | sed 's#.*refs/tags/##')
     if [ -z "$REF" ]; then REF=HEAD; LATEST_FAILED=1; fi
 fi
 SHA=$(git ls-remote "$STRATA_REPO" "$REF" 2>/dev/null | awk 'NR==1 {print substr($1, 1, 12)}')
@@ -147,6 +149,15 @@ progress_run() {
     return "$rc"
 }
 
+# Strata's 0.1 layout (setup.sh and docker-entrypoint.sh in the root) is what start.sh and post-setup.sh are built for; 0.2 (docker/entrypoint.sh, apps/) is not supported
+strata_layout_ok() { [ -f "$STRATA_HOME/setup.sh" ] && [ -f "$STRATA_HOME/docker-entrypoint.sh" ]; }
+strata_layout_fail() {
+    echo "start.sh: ERROR: Strata ${LABEL:-?} (${STRATA_REPO}, ref ${REF}) has no docker-entrypoint.sh, this is what is in $STRATA_HOME:" >&2
+    ls -A "$STRATA_HOME" 2>&1 | head -30 | sed 's/^/start.sh:   /' >&2
+    rm -rf "${STRATA_HOME:?}"
+    fail_alive "Strata 0.2 and later (releases v0.2.x, main since 2026-10-20) changed its layout (docker/entrypoint.sh, apps/); this image supports the 0.1 line. Set STRATA_REF=v0.1.45 (the newest 0.1 release, the default 'latest' picks it) and start again."
+}
+
 # ready = the Python environment and the engine are there AND they belong to this key (GPU architecture, CPU, Strata commit)
 app_ready() { [ -f "$STRATA_HOME/.venv/.strata-bootstrap-done" ] && [ -f "$STRATA_HOME/engine/BUILD.json" ] && [ -f "$STRATA_HOME/engine/strata" ] && [ "$(cat "$STRATA_HOME/.strata-key" 2>/dev/null)" = "$KEY" ]; }
 if ! app_ready; then
@@ -167,6 +178,7 @@ if ! app_ready; then   # no archive for this key: clone and prepare the Python e
         rm -rf "${STRATA_HOME:?}.tmp"
         git clone --depth 1 ${CLONE_REF:+--branch "$CLONE_REF"} "$STRATA_REPO" "$STRATA_HOME.tmp"
         rm -rf "${STRATA_HOME:?}"; mv "$STRATA_HOME.tmp" "$STRATA_HOME"
+        strata_layout_ok || strata_layout_fail
     fi
     if [ ! -f "$STRATA_HOME/.venv/.strata-bootstrap-done" ]; then
         echo "start.sh: creating the Python environment in $STRATA_HOME/.venv"
@@ -183,6 +195,7 @@ if [ -f "$STRATA_HOME/engine/BUILD.json" ] && [ ! -f "$STRATA_HOME/engine/strata
     echo "start.sh: WARNING: engine/BUILD.json exists but engine/strata is missing: removing the stamp so the setup builds the engine again" >&2
     rm -f "$STRATA_HOME/engine/BUILD.json"
 fi
+strata_layout_ok || strata_layout_fail
 chmod +x "$STRATA_HOME/setup.sh" "$STRATA_HOME/docker-entrypoint.sh"
 export STRATA_VERSION=$(sed -n 's/^project(strata VERSION \([0-9.]*\).*/\1/p' "$STRATA_HOME/CMakeLists.txt" 2>/dev/null | head -1)
 echo "start.sh: Strata ${STRATA_VERSION:-?} (${LABEL:-unknown}, commit ${SHA:-unknown})"

@@ -2,6 +2,7 @@
 # Hardware facts of this instance, sourced by start.sh, post-setup.sh and scripts/calibrate.sh.
 #   hw_detect   sets GPU_NAME GPU_COUNT GPU_VRAM_GIB GPU_CC DRIVER CPU_MODEL HOST_CORES CPU_QUOTA HOST_RAM_GIB POD_RAM_GIB
 #   hw_banner   prints them (the first lines of every start, to recognise the instance at a glance)
+#   volume_report   prints what the volume(s) and the store hold (mount, free space, top level, archives, data, calibrations)
 #   strata_hwkey <config>   Strata's hardware key for a config; has_calibration <key>: settings.json has an entry for it
 
 hw_slug() { printf '%s' "$1" | tr 'A-Z' 'a-z' | sed 's/[^a-z0-9]\+/-/g; s/^-//; s/-$//'; }
@@ -57,4 +58,35 @@ strata_hwkey() {
 # Strata's settings.json (calibrations per hardware key; on the volume through XDG_CONFIG_HOME) has an entry for this key
 has_calibration() {
     jq -e --arg k "$1" '.calibration[$k]' "${XDG_CONFIG_HOME:-$HOME/.config}/strata/settings.json" >/dev/null 2>&1
+}
+
+# What is on the volume: every candidate mount (/workspace on a Pod, /runpod-volume on Serverless) and the store in detail. Listings only
+# (no du: that is slow on a network volume), each with a timeout so a hanging mount cannot stall the start.
+volume_report() {
+    local d store="${STRATA_STORE:-}" f e=0 n s
+    case $- in *e*) e=1; set +e ;; esac
+    echo "start.sh: ---- volume ----"
+    for d in /workspace /runpod-volume; do
+        if [ ! -d "$d" ]; then echo "start.sh: $d  not present"; continue; fi
+        if grep -qs " $d " /proc/mounts; then s="mounted ($(findmnt -no FSTYPE -T "$d" 2>/dev/null | head -1))"; else s="a directory of the container disk, not a mount"; fi
+        n=$(timeout 20 ls -A "$d" 2>/dev/null | wc -l)
+        echo "start.sh: $d  $s, $(df -BG --output=avail,size "$d" 2>/dev/null | tail -1 | awk '{gsub("G","",$1); gsub("G","",$2); printf "%s GiB free of %s GiB", $1, $2}'), $n entries: $(timeout 20 ls -A "$d" 2>/dev/null | head -12 | tr '\n' ' ')"
+    done
+    if [ -z "$store" ]; then echo "start.sh: no store: nothing is kept between starts"
+    elif [ ! -d "$store" ]; then echo "start.sh: store $store does not exist yet (the first start creates it)"
+    else
+        echo "start.sh: store $store:"
+        for f in "$store"/app-*.tar.zst; do [ -f "$f" ] && echo "start.sh:   engine archive $(basename "$f")  $(du -h "$f" 2>/dev/null | cut -f1)  $(date -r "$f" +%F 2>/dev/null)"; done
+        [ -f "$(ls "$store"/app-*.tar.zst 2>/dev/null | head -1)" ] || echo "start.sh:   no engine archive yet (the first start on this hardware compiles the engine)"
+        if [ -d "$store/data" ]; then
+            echo "start.sh:   data/: $(timeout 20 ls -A "$store/data" 2>/dev/null | tr '\n' ' ')$([ -f "$store/data/.complete" ] && echo '(complete)' || echo '(not marked complete)')"
+            [ -d "$store/data/models" ] && echo "start.sh:   data/models: $(timeout 20 ls -lh "$store/data/models" 2>/dev/null | awk 'NR>1 {printf "%s (%s) ", $9, $5}')"
+        else echo "start.sh:   no data/ yet (the first start downloads the model)"; fi
+        f="$store/xdg/strata/settings.json"
+        if [ -f "$f" ]; then echo "start.sh:   calibrations in settings.json: $(jq -r '(.calibration // {}) | length' "$f" 2>/dev/null || echo '?')"
+        else echo "start.sh:   no settings.json (no calibration saved yet)"; fi
+    fi
+    echo "start.sh: ------------------"
+    [ "$e" = 1 ] && set -e
+    return 0
 }
