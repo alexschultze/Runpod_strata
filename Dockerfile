@@ -1,27 +1,31 @@
-# One image: the Strata engine is built on the pod (3-4 minutes on a big CPU, once per GPU/CPU/Strata commit) and archived to the
-# volume; start.sh restores it to /tmp. The devel base image is the one Strata's own Dockerfile uses (nvcc for the build).
-FROM nvidia/cuda:13.0.0-devel-ubuntu24.04
+# Strata 0.2 on Runpod: Strata's own ready-made image (engine and Terminal built in, nothing is compiled on the pod) plus our layer: SSH, the start
+# logic (data on the local disk, store on the network volume), the queue handler and the load-balancer proxy. Branch strata-v2-dev.
+#   STRATA_IMAGE  Strata's image: ghcr.io/niko1221/strata:<version>-cuda13 (latest-cuda13 = the newest release of that flavor; pin a version for
+#                 reproducible builds, e.g. 0.2.1-cuda13). cuda12 for drivers 575-579 and older cards (Pascal, Volta).
+ARG STRATA_IMAGE=ghcr.io/niko1221/strata:latest-cuda13
+FROM ${STRATA_IMAGE}
 
-ENV DEBIAN_FRONTEND=noninteractive PYTHONUNBUFFERED=1 LANG=C.UTF-8 STRATA_EXECV=1
+ENV DEBIAN_FRONTEND=noninteractive
 
-# The packages of Strata's own Dockerfile (build tools, Python with venv) plus
-# openssh-server (SSH), rsync (volume <-> local copies), fio/jq (benchmarks, config edits), tmux/htop/nano
+# openssh-server (SSH), rsync (volume <-> local copies), fio/jq (benchmarks, JSON), tmux/htop/nano, curl, Python with venv for the handler
 RUN apt-get update --yes && \
     apt-get install --yes --no-install-recommends \
-    build-essential ca-certificates curl git libatomic1 libgomp1 \
-    python3 python3-pip python3-venv unzip \
-    openssh-server rsync zstd fio jq tmux htop nano \
-    && rm -rf /var/lib/apt/lists/*
+    openssh-server rsync fio jq tmux htop nano curl \
+    python3 python3-pip python3-venv \
+    && rm -rf /var/lib/apt/lists/* && \
+    python3 -m venv /opt/runpod/venv && \
+    /opt/runpod/venv/bin/pip install --no-cache-dir runpod requests
 
 COPY serverless/proxy.py serverless/handler.py /opt/runpod/
 COPY scripts /app/scripts
 COPY strata/bench /app/bench
-COPY entry.sh start.sh sshd.sh post-setup.sh publish.sh volume-check.sh update-scripts.sh hwinfo.sh /opt/runpod/
+COPY entry.sh start.sh sshd.sh sync.sh volume-check.sh update-scripts.sh hwinfo.sh /opt/runpod/
 RUN chmod +x /opt/runpod/*.sh /app/scripts/*.sh /app/bench/bench.py /app/scripts/nvidia-smi-shim.py && \
     install -m 755 /app/scripts/nvidia-smi-shim.py /usr/local/bin/nvidia-smi
 
 EXPOSE 22 8080
 
-# entry.sh starts sshd and waits; AUTO_START=yes (or MODE=lb|queue) starts Strata through start.sh, otherwise run
-# /opt/runpod/start.sh by hand (in tmux)
-ENTRYPOINT ["/opt/runpod/entry.sh"]
+# Strata's image runs tini as PID 1 (forwards docker stop to its entrypoint, which unloads the model). entry.sh starts sshd and waits;
+# AUTO_START=yes (or MODE=lb|queue) starts Strata through start.sh, otherwise run /opt/runpod/start.sh by hand (in tmux).
+ENTRYPOINT ["/usr/bin/tini", "--", "/opt/runpod/entry.sh"]
+CMD ["run"]

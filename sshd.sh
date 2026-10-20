@@ -12,7 +12,7 @@ grep -qxF "$KEY_LINE" "$SSH_HOME/.ssh/authorized_keys" 2>/dev/null || echo "$KEY
 chmod 600 "$SSH_HOME/.ssh/authorized_keys"
 ssh-keygen -A >/dev/null
 # environment variables are not visible in SSH sessions by default: export them for logins (API_KEY included so scripts/bench-local.sh works; the file is root-only)
-printenv | grep -E '^(RUNPOD_|STRATA_|API_KEY=|MODEL=|FAMILY=|CONTEXT=|LOW_RAM=|RESIDENT_BUDGET_GIB=|MODE=|CUDA|NVIDIA|LD_LIBRARY_PATH|PATH)' \
+printenv | grep -E '^(RUNPOD_|STRATA_|API_KEY=|MODEL=|FAMILY=|CONTEXT=|PARALLEL=|TUNE=|RETUNE=|PRESET=|KV=|VISION=|GPUS?=|PORT=|LB_PORT=|COPY_DATA_LOCAL=|MODE=|CUDA|NVIDIA|LD_LIBRARY_PATH|PATH)' \
     | sed 's/^\([^=]*\)=\(.*\)$/export \1="\2"/' > /etc/rp_environment
 chmod 600 /etc/rp_environment
 grep -q rp_environment "$SSH_HOME/.bashrc" 2>/dev/null || echo 'source /etc/rp_environment' >> "$SSH_HOME/.bashrc"

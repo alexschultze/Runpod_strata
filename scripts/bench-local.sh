@@ -12,4 +12,4 @@ for i in $(seq 1 120); do
     sleep 5
 done
 curl -fs "$URL/health" >/dev/null || { echo "Strata did not answer on $URL/health after 10 minutes" >&2; exit 1; }
-exec /opt/strata/.venv/bin/python /app/bench/bench.py --url "$URL" --key "${STRATA_API_KEY:-${API_KEY:-}}" --model "${BENCH_MODEL:-default}" "$@"
+exec /opt/runpod/venv/bin/python /app/bench/bench.py --url "$URL" --key "${STRATA_API_KEY:-${API_KEY:-}}" --model "${BENCH_MODEL:-default}" "$@"

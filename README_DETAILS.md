@@ -1,4 +1,37 @@
-# Strata on Runpod
+# Strata on Runpod (branch strata-v2-dev: Strata 0.2)
+
+> **This branch builds on Strata 0.2's ready-made image.** The sections below the line `<!-- 0.1 -->` describe the 0.1 line (compile on the pod, engine archives,
+> `STRATA_CALIBRATE` through `settings.json`, hook in `docker-entrypoint.sh`) and are **outdated on this branch**; they are kept until the 0.2 integration is verified
+> on real hardware. The README.md of this branch is current.
+
+## How this branch works (Strata 0.2)
+
+```
+FROM ghcr.io/niko1221/strata:<version>-cuda13        # STRATA_IMAGE: engine + Terminal, tini as PID 1, state in /data
+  + SSH, rsync, fio, jq, tmux; a venv with `runpod` and `requests` (/opt/runpod/venv) for the queue handler
+  + /opt/runpod: entry.sh start.sh sync.sh hwinfo.sh update-scripts.sh volume-check.sh sshd.sh, proxy.py, handler.py; /app/scripts, /app/bench
+ENTRYPOINT tini -- /opt/runpod/entry.sh                # sshd, then (AUTO_START / MODE) start.sh, which ends in Strata's /opt/strata/entrypoint.sh
+```
+
+- **Image tags** `v0.2.<run>` and the commit SHA (the 0.1 branch keeps `v0.1.<run>`). Build argument `STRATA_IMAGE` (workflow input `strata_image`).
+- **`start.sh`:** info block, volume report, engine report (`strata components engine`), key check, then maps our variables to Strata's (README table), copies
+  `<volume>/strata-store/v2/data` to `/data` (rsync with progress, `COPY_DATA_LOCAL=yes`) or links `/data/Strata-data` to the volume (`no`), and starts Strata's
+  entrypoint (`exec` in pod mode; in the background beside `handler.py` / `proxy.py` for `queue` / `lb`, Strata on port 8080, the proxy on `LB_PORT`).
+- **`sync.sh`:** once `/health` says `loaded: true`, an incremental rsync of `/data` to the store (without `state/api-key` and logs), at idle priority.
+- **Tuning per card type:** Strata keeps tuning in the preset; the preset name defaults to `docker-<gpu>-<vram>g`. `STRATA_CALIBRATE=yes` -> `TUNE=quick`
+  (Strata tunes once per preset), `force` -> `TUNE=quick RETUNE=1`. This relies on Strata keeping tuning per preset: not verified.
+- **Gone:** engine archives, the hook, `post-setup.sh`, `publish.sh`, `calibrate.sh`, `STRATA_REF`/`STRATA_REPO`, `LOW_RAM`, `POOL_WORKERS`, `STRATA_ENGINE_ARGS`.
+
+## Open points before this replaces the 0.1 line
+
+1. Run the image on a real GPU and on Runpod (start time, speed, `strata components engine` on L4, 3090, Blackwell, A100/H100).
+2. Docker options Strata recommends (`--ulimit memlock`, `--shm-size`, `--stop-timeout`) on Runpod.
+3. Whether tuning is really kept per preset, and whether a preset of one card is reused wrongly on another.
+4. `STRATA_SET` keys for what `POOL_WORKERS` did (the pod's CPU quota is invisible to Strata).
+5. The handler's use of `GET /v1/status` (`concurrency.serving` exists in the code) and the queue/lb modes with Strata 0.2.
+6. The nvidia-smi shim for MIG slices: kept, not needed or tested with the new engine detection.
+
+<!-- 0.1 -->
 
 Runpod image for [Strata](https://github.com/Niko1221/Strata) (OpenAI-/Anthropic-compatible LLM server, API on :8080, `/health`).
 Layout follows [runpod-workers/pod-template](https://github.com/runpod-workers/pod-template).

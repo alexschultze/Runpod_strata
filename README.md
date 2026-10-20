@@ -1,5 +1,9 @@
 # Strata on Runpod
 
+> **Branch `strata-v2-dev`: Strata 0.2 integration, work in progress.** The image is built on Strata's own ready-made image (engine included, nothing is
+> compiled on the pod). Tested here with a fake Strata entrypoint only: **not yet started on a real GPU or on Runpod**. The stable line for Strata 0.1 is the
+> branch `claude/strata-runpod-deploy-zegtn6` (images `v0.1.<n>`); images of this branch are tagged `v0.2.<n>`.
+
 One Docker image that runs [Strata](https://github.com/Niko1221/Strata) (an OpenAI-compatible server for Qwen3.8-Flash-Next) on a Runpod
 **Pod** or **Serverless** endpoint. The engine is built on the machine the first time, archived on your network volume, and restored in
 minutes afterwards. Details for tinkerers: [README_DETAILS.md](README_DETAILS.md).
@@ -10,24 +14,23 @@ ghcr.io/alexschultze/strata-runpod:<tag>        # the tag of the latest successf
 
 ## Key points
 
-1. **Serverless: use a network volume (strongly recommended), in the same data center, not the global volume.** This image keeps the compiled
-   engine and the calibration on the volume (engine archive per GPU architecture and CPU, Strata's calibration per hardware). A worker on
-   hardware that was seen before restores both instead of compiling and calibrating again. Without a volume every cold start repeats all of it.
-2. **The first start on new hardware compiles the engine and, with `STRATA_CALIBRATE=yes`, calibrates: expect startup times of up to 15-20 minutes**
-   (the project owner's figure; compiling takes 3-4 minutes, and Strata's documentation gives 15-30 minutes for the calibration alone, so allow 30 minutes or
-   more to be safe). Set timeouts and idle limits accordingly, and start such a worker once by hand before real traffic arrives. Without calibration
-   (`STRATA_CALIBRATE=no`, the default) only the compile applies.
-3. **The fastest start** (engine compiled and calibrated, network volume in the same data center, not the global one): **about 90-150 seconds** (the
-   project owner's figure; an earlier run that included copying the model to the local disk took 3.5 minutes).
+1. **Strata brings its own engine.** The image is built `FROM ghcr.io/niko1221/strata:<version>-cuda13` (build argument `STRATA_IMAGE`, default
+   `latest-cuda13`; pin a version such as `0.2.1-cuda13` for a reproducible build). No compile on the pod: the 3-4 minutes and the engine archives of the 0.1 line are gone.
+2. **Serverless: use a network volume** in the same data center. Model, presets and tuning are kept there (`<volume>/strata-store/v2`) and copied to the local disk
+   at start, so a new worker does not download or tune again.
+3. **Tuning is per kind of card:** `STRATA_CALIBRATE=yes` runs Strata's quick tuning (about 20 minutes, once) for a preset that is named after the GPU
+   (`docker-<gpu>-<vram>g`), so every card type is tuned once and keeps its result. Without it nothing is tuned.
+4. **Not measured yet on this branch:** start times, speed, the Docker options Strata recommends (`--ulimit memlock`, `--shm-size`) on Runpod, and which
+   GPU architectures the engine in the image covers (check with `strata components engine` in the container; the start log prints it).
 
 ## What you need
 
 | | |
 |---|---|
 | **GPU** | NVIDIA with at least ~22 GB VRAM (tested: RTX PRO 4500 Blackwell 32 GB, RTX 3090 24 GB, L4 22 GB) |
-| **RAM** | about 48 GB or more for the recommended model (IQ2_XS); below that set `LOW_RAM` |
+| **RAM** | about 48 GB or more for the recommended model (IQ2_XS). Strata plans from the host's RAM, so it warns about a pod memory limit |
 | **Local disk (container disk)** | **85 GB** for the recommended model. The model data (73 GiB) is copied there for speed |
-| **Network volume** | **in the same data center as the pod or endpoint.** It stores the engine archive and the model files, so a restart or a new worker does not rebuild or download anything |
+| **Network volume** | **in the same data center as the pod or endpoint.** It stores the model, presets and tuning (`<volume>/strata-store/v2`), so a restart or a new worker does not download or tune again |
 | **API key** | a secret of your own (`STRATA_API_KEY`). Without it nothing starts |
 
 ## Quick start
@@ -39,28 +42,29 @@ pod waits; run `/opt/runpod/start.sh` in `tmux` (or set `AUTO_START=yes` to star
 **Serverless:** create a queue-based endpoint with the image, a network volume in the same data center and an 85 GB container disk. Workers start
 Strata automatically (`MODE=queue` is the default there; set it yourself if your worker does not). Call `/runsync` or `/run`, or Runpod's OpenAI route (`https://api.runpod.ai/v2/<endpoint id>/openai/v1/...`).
 
-**The first request after idle waits for a worker to start**: about 90-150 seconds at best, 3.5-4 minutes when the model is copied locally, and 15-20 minutes
-on hardware nobody has run before (see "How long does a start take"). Set client timeouts to 10-15 minutes (more for new hardware) and prefer
-`/run` + `/status/<id>` over `/runsync`. In LiteLLM: `timeout: 900`, `stream_timeout: 900`, `num_retries: 0`.
+**The first request after idle waits for a worker to start** (image pull, copying the data to the local disk, loading the model; times not measured on this branch
+yet). Set client timeouts to 10-15 minutes and prefer `/run` + `/status/<id>` over `/runsync`. In LiteLLM: `timeout: 900`, `stream_timeout: 900`, `num_retries: 0`.
 
 ## The variables you will actually use
 
 | Variable | Default | What it does |
 |---|---|---|
-| `STRATA_API_KEY` | – (**required**) | the key clients send as `Authorization: Bearer ...`. Put it in Runpod Secrets, never in the image or repo |
-| `MODEL` | `IQ2_XS` | the quantisation: `IQ2_XS` (recommended), `Q2_0`, `IQ3_XXS`, `IQ3_S` (qwen); `IQ1_M` (coder); `UD-IQ4_XS`, `UD-Q4_K_XL` (unsloth) |
-| `FAMILY` | `qwen` | `qwen`, `coder` or `unsloth` |
-| `CONTEXT` | `32768` | context length in tokens (more context needs more VRAM and RAM) |
-| `COPY_DATA_LOCAL` | `yes` | `yes`: copy the model from the volume to the local disk at start (fast to run, needs the 85 GB). `no`: use it on the volume (no copy, but slower to run) |
-| `STRATA_CALIBRATE` | `no` | `no`: never calibrate. `yes`: calibrate (15-30 min) only when none exists for this GPU/CPU. `force`: always. Strata keeps one calibration per hardware on the volume and applies it automatically |
-| `STRATA_PARALLEL` | unset (1) | number of requests decoded together. Leave unset unless you measured a gain (it can slow a single request down) |
-| `LOW_RAM` | unset (Strata decides) | `resident`, `mmap`, `on`, `off`: only when the pod has much less RAM than the host reports |
+| `STRATA_API_KEY` | – (**required**) | the key clients send as `Authorization: Bearer ...` (alias `API_KEY`, Strata's own name). Put it in Runpod Secrets, never in the image or repo. Use 16+ characters |
+| `MODEL` | `IQ2_XS` | the model size: `IQ2_XS` (recommended), `Q2_0`, `IQ3_XXS`, `IQ3_S`, ... (Strata's list); empty would let Strata choose |
+| `FAMILY` | unset | `qwen`, `coder`, ... only when a size exists in several families |
+| `CONTEXT` | `32768` | context length in tokens (Strata alone would take the largest that fits; ours is smaller to keep VRAM for the experts) |
+| `COPY_DATA_LOCAL` | `yes` | `yes`: copy the store on the volume to the local disk at start (needs about 85 GB container disk for IQ2_XS). `no`: the model files stay on the volume (slower to run) |
+| `STRATA_CALIBRATE` | `no` | `no`: no tuning. `yes`: Strata's quick tuning once for this kind of card (`TUNE=quick`). `force`: tune again (`RETUNE=1`). Or set `TUNE` yourself |
+| `STRATA_PARALLEL` | unset | requests answered together (Strata's `PARALLEL`, 1-8). Leave unset unless you measured a gain |
+| `STRATA_SET` | unset | advanced engine settings, space separated `key=value` (Strata's `--set`), for example `prefill=65536` |
+| `PRESET` | `docker-<gpu>-<vram>g` | Strata's preset name; the default gives every card type its own preset and tuning |
 | `AUTO_START` | `no` | Pods only: `yes` starts Strata without you running `start.sh` |
 | `SSH_PUBLIC_KEY` | – | your public key for SSH into the pod (a Runpod `PUBLIC_KEY` also works) |
-| `STRATA_REF` | `latest` | Strata version: `latest` = the newest **0.1** release (`v0.1.45` at the moment; Strata 0.2 has another layout and is **not supported yet**), a tag such as `v0.1.44.1`, a branch or `HEAD` |
-| `STRATA_REPO` | `Niko1221/Strata` | where Strata is cloned from (`owner/repo` or a git URL, for a fork) |
-| `SCRIPTS_REF` | unset | a git branch or tag of this repo: the scripts are pulled from it at start instead of the ones in the image (no rebuild for script changes) |
-| `MODE` | `pod` (Serverless: `queue`) | `pod`, `queue` (Runpod queue handler) or `lb` (load-balancer proxy) |
+| `SCRIPTS_REF` | unset | a git branch or tag of this repo: the scripts are pulled from it at start instead of the ones in the image |
+| `MODE` | `pod` (Serverless: `queue`) | `pod`, `queue` (Runpod queue handler) or `lb` (load-balancer proxy on `LB_PORT`, default 8000) |
+
+Gone from the 0.1 line (ignored with a warning): `LOW_RAM`, `REINSTALL`, `RESIDENT_BUDGET_GIB`, `STRATA_REF`, `STRATA_REPO`, `STRATA_ENGINE_ARGS`, `POOL_WORKERS`.
+Strata 0.2 plans RAM and the engine itself.
 
 All other variables are listed in [README_DETAILS.md](README_DETAILS.md).
 
@@ -68,13 +72,12 @@ All other variables are listed in [README_DETAILS.md](README_DETAILS.md).
 
 | Case | Time |
 |---|---|
-| **Fastest:** engine compiled and calibrated, network volume in the same data center (not global) | **about 90-150 seconds** (project owner's figure) |
-| Normal start with the model copied from the volume to the local disk (`COPY_DATA_LOCAL=yes`) | about 3.5 minutes (measured earlier) |
-| **First start on new hardware:** compile the engine (once per GPU architecture and CPU) and, with `STRATA_CALIBRATE=yes`, calibrate | **up to 15-20 minutes** by the owner's figure (compiling 3-4 minutes; Strata's documentation gives 15-30 minutes for the calibration alone) |
-| Very first start, no model data on the volume | + download of about 70 GB (not measured) |
-| Image not yet cached on the host | + pull of the image (about 3.8 GiB compressed; not measured) |
+| Worker starts, model and presets on the volume, copied to the local disk | not measured on this branch (the 0.1 line took about 3.5 minutes with the copy; there the engine restore is gone now) |
+| Very first start, no model data on the volume | the model download (about 70 GB, not measured) plus Strata's preparation of the pack |
+| `STRATA_CALIBRATE=yes` on a card type nobody has tuned | + up to about 20 minutes (Strata's quick tuning), once per card type |
+| Image not yet cached on the host | + pull of the image (Strata's engine image is about 640 MB to download, ours adds SSH, Python and tools; not measured) |
 
-At start the log shows an **info block** (GPU, VRAM, CPU, RAM, Runpod ids), then a progress line every 10 s while copying.
+At start the log shows an **info block** (GPU, VRAM, CPU, RAM, Runpod ids, URL), the **volume** and the **engine** of the image, then a progress line every 10 s while copying.
 
 ## Measured performance (for reference)
 
@@ -107,9 +110,8 @@ At 1 $/hour and 150 tok/s the cost per million output tokens is about **3.70 $ a
 - **One request at a time** is Strata's default; others wait in its queue. The prompt cache reuses the start of a repeated prompt.
 - **Serverless job input** `{"input": {"path": "/api_direct"}}` returns the worker's own URL (`https://<id>-8080.proxy.runpod.net/`, for the website). It
   keeps nothing alive; the worker still stops after the endpoint's idle timeout.
-- **A new GPU type** on the same volume: the engine is built once per GPU architecture and CPU, and calibration is per hardware. With
-  `STRATA_CALIBRATE=yes` the first start on new hardware calibrates by itself.
-- **Strata reads the host's RAM,** not the pod's limit, when it sets itself up. The start warns if the limit looks too small for the model; then set `LOW_RAM`.
-- **Strata 0.2 is not supported yet:** since `v0.2.0-beta` (and `main` since 2026-10-20) Strata has no `docker-entrypoint.sh`. `latest` therefore stays on the 0.1 line;
-  starting a 0.2 tag stops with a message that names `STRATA_REF=v0.1.45`.
-- **Debugging:** SSH in (`SSH_PUBLIC_KEY`), logs are in `/workspace/strata-store/logs/` and the engine log is linked there.
+- **A new GPU type** on the same volume: it gets its own preset (`docker-<gpu>-<vram>g`), so with `STRATA_CALIBRATE=yes` its first start runs Strata's quick tuning once
+  and keeps the result. Whether the engine in the image supports the card: the start log prints `strata components engine`.
+- **Strata reads the host's RAM,** not the pod's limit, when it plans (its entrypoint warns about a memory limit). `LOW_RAM` no longer exists in 0.2.
+- **Docker options Strata recommends** (`--ulimit memlock=-1:-1`, `--shm-size 2g`, `--stop-timeout 120`) cannot always be set on Runpod: untested there.
+- **Debugging:** SSH in (`SSH_PUBLIC_KEY`), logs are in `<volume>/strata-store/v2/logs/` (`sync.log`) and in `/data/install` (Strata's logs).

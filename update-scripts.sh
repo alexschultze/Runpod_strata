@@ -3,7 +3,7 @@
 # Opt-in: only runs when SCRIPTS_REF is set (branch, tag or commit). Called by entry.sh; usable by hand: SCRIPTS_REF=main /opt/runpod/update-scripts.sh
 #   SCRIPTS_REF    branch/tag to use (unset = keep the scripts of the image). The repo is public: no credentials are used.
 #   SCRIPTS_REPO   owner/repo or git URL (default alexschultze/Runpod_strata)
-# Replaced: /opt/runpod/{start,sshd,post-setup,publish,volume-check,hwinfo}.sh, /opt/runpod/{proxy,handler}.py, /app/scripts, /app/bench.
+# Replaced: /opt/runpod/{start,sshd,sync,volume-check,hwinfo}.sh, /opt/runpod/{proxy,handler}.py, /app/scripts, /app/bench.
 # Not replaced: entry.sh (the bootstrap), the Dockerfile's packages and the nvidia-smi shim (those need an image build).
 # On any failure the image's own scripts stay in place.
 [ -n "${SCRIPTS_REF:-}" ] || exit 0
@@ -18,7 +18,7 @@ if ! git clone -q --depth 1 --branch "$SCRIPTS_REF" "$REPO" "$W/r" 2>"$W/err"; t
     fi
 fi
 R="$W/r"; N=0
-for f in start.sh sshd.sh post-setup.sh publish.sh volume-check.sh hwinfo.sh; do [ -f "$R/$f" ] && install -m 0755 "$R/$f" "$RP/$f" && N=$((N + 1)); done
+for f in start.sh sshd.sh sync.sh volume-check.sh hwinfo.sh; do [ -f "$R/$f" ] && install -m 0755 "$R/$f" "$RP/$f" && N=$((N + 1)); done
 for f in proxy.py handler.py; do [ -f "$R/serverless/$f" ] && install -m 0644 "$R/serverless/$f" "$RP/$f" && N=$((N + 1)); done
 [ -d "$R/scripts" ] && mkdir -p "$APP/scripts" && cp -rf "$R/scripts/." "$APP/scripts/" && chmod +x "$APP"/scripts/*.sh 2>/dev/null
 [ -d "$R/strata/bench" ] && mkdir -p "$APP/bench" && cp -rf "$R/strata/bench/." "$APP/bench/"

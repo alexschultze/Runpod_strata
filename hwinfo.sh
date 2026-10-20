@@ -1,9 +1,9 @@
 #!/bin/bash
-# Hardware facts of this instance, sourced by start.sh, post-setup.sh and scripts/calibrate.sh.
+# Hardware facts of this instance, sourced by start.sh.
 #   hw_detect   sets GPU_NAME GPU_COUNT GPU_VRAM_GIB GPU_CC DRIVER CPU_MODEL HOST_CORES CPU_QUOTA HOST_RAM_GIB POD_RAM_GIB
 #   hw_banner   prints them (the first lines of every start, to recognise the instance at a glance)
 #   volume_report   prints what the volume(s) and the store hold (mount, free space, top level, archives, data, calibrations)
-#   strata_hwkey <config>   Strata's hardware key for a config; has_calibration <key>: settings.json has an entry for it
+#   engine_report   prints what Strata's engine (in the image) says about this machine
 
 hw_slug() { printf '%s' "$1" | tr 'A-Z' 'a-z' | sed 's/[^a-z0-9]\+/-/g; s/^-//; s/-$//'; }
 
@@ -49,15 +49,21 @@ hw_banner() {
     echo "start.sh: ------------------------"
 }
 
-# Strata's own key of what a calibration is valid for (setup.py hardware_key: GPU, VRAM, CPU, RAM, model, context, images) for a config file
-strata_hwkey() {
-    local home="${STRATA_HOME:-/opt/strata}"
-    ( cd "$home" && "$home/.venv/bin/python" -c 'import json,sys,setup; print(setup.hardware_key(json.load(open(sys.argv[1], encoding="utf-8-sig"))))' "$1" ) 2>/dev/null
-}
-
-# Strata's settings.json (calibrations per hardware key; on the volume through XDG_CONFIG_HOME) has an entry for this key
-has_calibration() {
-    jq -e --arg k "$1" '.calibration[$k]' "${XDG_CONFIG_HOME:-$HOME/.config}/strata/settings.json" >/dev/null 2>&1
+# The engine that is part of Strata's image (Strata 0.2 ships it ready-made): what `strata components engine` says about it and this card.
+# Nothing is compiled or archived on the pod any more.
+engine_report() {
+    local bin="${STRATA_BIN:-/opt/strata/terminal/bin/strata}" out e=0
+    case $- in *e*) e=1; set +e ;; esac
+    echo "start.sh: ---- engine (part of the image) ----"
+    if [ -x "$bin" ]; then
+        out=$(timeout 60 "$bin" components engine 2>&1)
+        printf '%s\n' "$out" | head -14 | sed 's/^/start.sh:   /'
+    else
+        echo "start.sh:   $bin not found (is this image built on Strata's image?)"
+    fi
+    echo "start.sh: ------------------------------------"
+    [ "$e" = 1 ] && set -e
+    return 0
 }
 
 # What is on the volume: every candidate mount (/workspace on a Pod, /runpod-volume on Serverless) and the store in detail. Listings only
@@ -76,14 +82,11 @@ volume_report() {
     elif [ ! -d "$store" ]; then echo "start.sh: store $store does not exist yet (the first start creates it)"
     else
         echo "start.sh: store $store:"
-        echo "start.sh:   engine archives: $(ls "$store"/app-*.tar.zst 2>/dev/null | wc -l) (listed under 'engines' below)"
         if [ -d "$store/data" ]; then
             echo "start.sh:   data/: $(timeout 20 ls -A "$store/data" 2>/dev/null | tr '\n' ' ')$([ -f "$store/data/.complete" ] && echo '(complete)' || echo '(not marked complete)')"
-            [ -d "$store/data/models" ] && echo "start.sh:   data/models: $(timeout 20 ls -lh "$store/data/models" 2>/dev/null | awk 'NR>1 {printf "%s (%s) ", $9, $5}')"
+            [ -d "$store/data/Strata-data" ] && echo "start.sh:   data/Strata-data: $(timeout 20 ls -A "$store/data/Strata-data" 2>/dev/null | tr '\n' ' ')"
+            [ -d "$store/data/state" ] && echo "start.sh:   data/state (presets, tuning): $(timeout 20 ls -A "$store/data/state" 2>/dev/null | tr '\n' ' ')"
         else echo "start.sh:   no data/ yet (the first start downloads the model)"; fi
-        f="$store/xdg/strata/settings.json"
-        if [ -f "$f" ]; then echo "start.sh:   calibrations in settings.json: $(jq -r '(.calibration // {}) | length' "$f" 2>/dev/null || echo '?')"
-        else echo "start.sh:   no settings.json (no calibration saved yet)"; fi
     fi
     echo "start.sh: ------------------"
     [ "$e" = 1 ] && set -e

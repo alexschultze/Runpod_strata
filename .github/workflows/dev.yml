@@ -2,6 +2,11 @@ name: Build and Push Strata Image
 
 on:
   workflow_dispatch:
+    inputs:
+      strata_image:
+        description: "Strata's image to build on (pin a version for a reproducible build, e.g. ghcr.io/niko1221/strata:0.2.1-cuda13)"
+        required: false
+        default: "ghcr.io/niko1221/strata:latest-cuda13"
 
 permissions:
   contents: read
@@ -30,7 +35,7 @@ jobs:
       - name: Bench client tests
         run: python3 tests/test_bench_parallel.py
 
-      # start.sh with a fake Strata repo: key, archive, restore, data copy, version change, hook, API key (no GPU, no download)
+      # start.sh with a fake Strata image entrypoint: environment mapping, local data copy, store sync (no GPU, no download)
       - name: Test start.sh
         run: sudo bash tests/run.sh
 
@@ -61,8 +66,10 @@ jobs:
           file: ./Dockerfile
           platforms: ${{ env.DOCKER_PLATFORM }}
           push: true
+          build-args: |
+            STRATA_IMAGE=${{ inputs.strata_image || 'ghcr.io/niko1221/strata:latest-cuda13' }}
           tags: |
-            ${{ env.DOCKER_IMAGE }}:v0.1.${{ github.run_number }}
+            ${{ env.DOCKER_IMAGE }}:v0.2.${{ github.run_number }}
             ${{ env.DOCKER_IMAGE }}:${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max

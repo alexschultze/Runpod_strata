@@ -1,6 +1,6 @@
 #!/bin/bash
-# Tests of start.sh, post-setup.sh and publish.sh with a fake Strata (no GPU, no model download).
-# Needs root: the scripts use /opt/runpod and /opt/strata, like in the image. Run: sudo bash tests/run.sh
+# Tests of start.sh and sync.sh against a fake Strata entrypoint and engine tool (no GPU, no image, no download). No root needed: DATA_DIR,
+# STRATA_STORE, STRATA_ENTRYPOINT and STRATA_BIN point into a temporary folder. Run: bash tests/run.sh
 set -u
 HERE=$(cd "$(dirname "$0")/.." && pwd)
 T=$(mktemp -d)
@@ -10,139 +10,74 @@ bad() { echo "  FAIL: $1"; FAILS=$((FAILS + 1)); }
 has() { printf '%s' "$OUT" | grep -qE -- "$1"; }          # the last run's output matches
 expect()   { if has "$2"; then ok "$1"; else bad "$1 (no match for: $2)"; printf '%s\n' "$OUT" | tail -15 | sed 's/^/        /'; fi; }
 expect_no() { if has "$2"; then bad "$1 (unexpected: $2)"; else ok "$1"; fi; }
-cleanup() { rm -f /opt/strata /opt/runpod/post-setup.sh /opt/runpod/publish.sh /opt/runpod/sshd.sh /opt/runpod/hwinfo.sh; rm -rf "${T:?}"; }
+cleanup() { rm -rf "${T:?}"; }
 trap cleanup EXIT
 
-mkdir -p /opt/runpod "$T/bin" "$T/upstream"
-cp "$HERE"/post-setup.sh "$HERE"/publish.sh "$HERE"/sshd.sh "$HERE"/hwinfo.sh /opt/runpod/
-chmod +x /opt/runpod/*.sh
-printf '#!/bin/sh\ncase "$*" in *-L*) echo "GPU 0: Fake";; *query-gpu=name,memory.total*) echo "${FAKE_GPU:-Fake GPU 24G}, 24564 MiB, 8.6, 550.1";; *) echo 8.6;; esac\n' > "$T/bin/nvidia-smi"; chmod +x "$T/bin/nvidia-smi"
-
-# a fake Strata repo with two release tags; its entrypoint has the same hook line as the real one
-cd "$T/upstream" || exit 1
-git init -q .
-cat > docker-entrypoint.sh <<'EOS'
+mkdir -p "$T/bin" "$T/store/data/Strata-data/models" "$T/store/data/state"
+printf '#!/bin/sh\ncase "$*" in *-L*) echo "GPU 0: Fake";; *query-gpu=name,memory.total*) echo "${FAKE_GPU:-Fake GPU 24G}, 24564 MiB, 8.6, 550.1";; *) echo 8.6;; esac\n' > "$T/bin/nvidia-smi"
+# Strata's entrypoint in the image: here it only prints what it was given
+cat > "$T/entry-fake.sh" <<'EOS'
 #!/bin/sh
-set -e
-cd /opt/strata || exit 1
-tag="$(printf '%s' "$MODEL" | tr 'A-Z' 'a-z')"
-cfg="$STRATA_DATA/config/strata-$tag.json"
-mkdir -p "$STRATA_DATA/config"
-if [ ! -f "$cfg" ] || [ "${REINSTALL:-0}" = 1 ]; then
-  echo "FAKE SETUP reinstall=${REINSTALL:-0}"
-  mkdir -p engine "$STRATA_DATA/models" "$STRATA_DATA/packs/$tag" "$STRATA_DATA/mtp"
-  echo built > engine/BUILD.json; echo bin > engine/strata
-  [ -f "$STRATA_DATA/models/model.gguf" ] || echo bigdata > "$STRATA_DATA/models/model.gguf"
-  # like Strata's setup: a new config gets the calibration saved for this hardware (settings.json), else the defaults
-  HKEY=$(python3 -c 'import setup; print(setup.hardware_key({}))')
-  S="${XDG_CONFIG_HOME:-$HOME/.config}/strata/settings.json"
-  ARGS='["--max-context","32768"]'
-  [ -f "$S" ] && ARGS=$(jq -c --arg k "$HKEY" '["--max-context","32768"] + ((.calibration[$k].settings // {}) | to_entries | map([.key, .value]) | flatten)' "$S")
-  echo "{\"args\":$ARGS}" > "strata-$tag.json"; cp -f "strata-$tag.json" "$cfg"
-else
-  ln -sfn "$cfg" "/opt/strata/strata-$tag.json"
-fi
-set -- --port "$PORT"
-echo "FAKE SERVER LOW_RAM=${LOW_RAM-unset} API_KEY=${API_KEY-unset} args=$(jq -c .args "strata-$tag.json")"
+echo "FAKE STRATA args=$* API_KEY=${API_KEY-unset} MODEL=$MODEL CONTEXT=$CONTEXT PRESET=${PRESET-} TUNE=${TUNE-unset} RETUNE=${RETUNE-unset} PARALLEL=${PARALLEL-unset} STRATA_SET=${STRATA_SET-unset} LOW_RAM=${LOW_RAM-unset}"
 EOS
-printf 'import os\ndef hardware_key(cfg):\n    return "|".join([os.environ.get("FAKE_GPU", "Fake GPU 24G"), "24GB", "cpu", "16GB", "model", "32768", "text"])\n' > setup.py
-echo "" > requirements.txt; printf '#!/bin/sh\n' > setup.sh; chmod +x docker-entrypoint.sh setup.sh
-printf 'project(strata VERSION 0.1.1 LANGUAGES CXX)\n' > CMakeLists.txt
-G="git -c user.email=t@t -c user.name=t"
-git add -A && $G commit -qm v1 && git tag v0.1.1
-printf 'project(strata VERSION 0.1.2 LANGUAGES CXX)\n' > CMakeLists.txt
-$G commit -qam v2 && git tag v0.1.2
-git checkout -q -b layout2 && git rm -q docker-entrypoint.sh && $G commit -qm 'v0.2 layout' && git tag v0.2.0 && git checkout -q -   # a release of Strata's new layout
-cd "$HERE" || exit 1
+printf '#!/bin/sh\n[ "$1 $2" = "components engine" ] && echo "engine: cuda, usable: yes, archs: sm_86" || echo other\n' > "$T/bin/strata"
+chmod +x "$T/bin/nvidia-smi" "$T/entry-fake.sh" "$T/bin/strata"
+echo "weights" > "$T/store/data/Strata-data/models/m.gguf"; echo "secret-key" > "$T/store/data/state/api-key"; echo '{}' > "$T/store/data/state/presets.json"
 
-run() {   # env assignments for this run; the output goes to $OUT
-    OUT=$(env -u LOW_RAM -u API_KEY -u STRATA_API_KEY -u PUBLIC_KEY -u SSH_PUBLIC_KEY -u REINSTALL -u COPY_DATA_LOCAL \
-        PATH="$T/bin:$PATH" STRATA_STORE="$T/store" STRATA_LOCAL="$T/local" STRATA_REPO="file://$T/upstream" \
-        MODEL=IQ2_XS PORT=8080 POOL_WORKERS=6 STRATA_API_KEY=k "$@" timeout 300 bash "$HERE/start.sh" 2>&1)
+run() {   # env assignments for this run; the output goes to $OUT. A new DATA_DIR per run unless one is given.
+    D=$(mktemp -d "$T/dataXXXX")
+    OUT=$(env -u LOW_RAM -u API_KEY -u STRATA_API_KEY -u TUNE -u RETUNE -u PARALLEL -u STRATA_PARALLEL -u STRATA_CALIBRATE -u STRATA_SET -u PRESET -u COPY_DATA_LOCAL -u MODE \
+        PATH="$T/bin:$PATH" STRATA_ENTRYPOINT="$T/entry-fake.sh" STRATA_BIN="$T/bin/strata" DATA_DIR="$D" STRATA_STORE="$T/store" SYNC_WAIT=no \
+        STRATA_API_KEY=k1234567890123456 "$@" timeout 120 bash "$HERE/start.sh" 2>&1)
 }
-settle() { sleep 1; for _ in $(seq 1 600); do pgrep -f /opt/runpod/publish.sh >/dev/null || return 0; sleep 0.5; done; }   # the background publish (tar + zstd of the Strata folder) is slow on a busy CI runner: wait up to 5 min
-fresh_pod() { rm -rf "${T:?}/local"; rm -f /opt/strata; }
+settle() { sleep 1; for _ in $(seq 1 60); do pgrep -f "$HERE/sync.sh" >/dev/null || return 0; sleep 0.5; done; }
 
-echo "1. first start on an empty store: key, setup, archive, data pushed, banner"
+echo "1. a default start: info blocks, Strata's own settings from ours"
 run env; settle
-expect    "the volume report is printed first"     "---- volume ----"
-expect    "no engine for this key: says it is compiled" "none for this key: the engine is compiled"
-expect    "banner names GPU, VRAM and RAM"        "GPU +1x Fake GPU 24G, 24 GiB VRAM"
-expect    "key carries the latest tag"            "engine key sm86-[0-9a-f]{8}-v0\.1\.2"
-expect    "the setup ran, pool workers written"   'FAKE SETUP reinstall=0'
-[ -f "$T"/store/app-sm86-*-v0.1.2.tar.zst ] && ok "engine archive in the store" || bad "engine archive missing"
-[ -f "$T/store/data/.complete" ] && ok "data pushed and marked complete" || bad "data not complete"
+expect    "the info block names GPU and VRAM"     "GPU +1x Fake GPU 24G, 24 GiB VRAM"
+expect    "the volume report lists the store"     "---- volume ----"
+expect    "the engine of the image is reported"   "engine \(part of the image\)"
+expect    "the engine tool's answer is shown"     "usable: yes"
+expect    "model and context defaults"            "MODEL=IQ2_XS CONTEXT=32768"
+expect    "the key reaches Strata"                "API_KEY=k1234567890123456"
+expect    "one preset per kind of card"           "PRESET=docker-fake-gpu-24g-24g"
+expect    "no tuning by default"                  "TUNE=unset RETUNE=unset"
+OUT=$(env -u API_KEY -u STRATA_API_KEY PATH="$T/bin:$PATH" STRATA_ENTRYPOINT="$T/entry-fake.sh" STRATA_BIN="$T/bin/strata" DATA_DIR="$T/nokey" STRATA_STORE="$T/store" timeout 5 bash "$HERE/start.sh" 2>&1)
+expect    "without an API key Strata is not started" "NOT started"
 
-echo "2. new pod, same store: restore instead of setup"
-fresh_pod; run env; settle
-expect    "the engine list marks the matching archive" "in the store: sm86-.*<== matches this start"
-expect    "engine restored from the archive"      "restoring the engine from .*\.tar\.zst"
-expect    "data copied from the store"            "copying the model data from"
-expect_no "no setup this time"                    "FAKE SETUP"
+echo "2. our variables mapped to Strata's"
+run env STRATA_CALIBRATE=yes STRATA_PARALLEL=2 STRATA_SET="prefill=65536"; settle
+expect    "calibrate yes: tune quick"             "TUNE=quick RETUNE=unset"
+expect    "parallel"                              "PARALLEL=2"
+expect    "advanced settings pass through"        "STRATA_SET=prefill=65536"
+run env STRATA_CALIBRATE=force; settle
+expect    "calibrate force: tune again"           "TUNE=quick RETUNE=1"
+run env PRESET=mine LOW_RAM=on; settle
+expect    "an own preset name wins"               "PRESET=mine"
+expect    "LOW_RAM is said to be ignored"         "LOW_RAM is from the Strata 0.1 image and is ignored"
 
-echo "3. COPY_DATA_LOCAL=no: data stay on the volume"
-fresh_pod; run env COPY_DATA_LOCAL=no; settle
-[ -L "$T/local/Strata-data/models" ] && ok "models is a link into the store" || bad "models is not a link"
-
-echo "4. other Strata version: new Strata, REINSTALL for the existing config"
-run env STRATA_REF=v0.1.1; settle
-expect    "REINSTALL=1 for the changed version"   "REINSTALL=1 for this start"
-
-echo "5. config from the volume but no engine (no archive for this key): the setup must build it"
-fresh_pod; run env; settle; rm -f "$T"/store/app-*.tar.zst "$T"/store/app-*.json; fresh_pod
+echo "3. data: the store is copied to the local disk once, the key file stays behind"
 run env; settle
-expect    "REINSTALL=1 when the engine binary is missing" "no engine binary .* REINSTALL=1"
+LD=$(printf '%s' "$OUT" | sed -n 's/.*DATA=\(.*\)$/\1/p' | head -1)
+[ -f "$LD/Strata-data/models/m.gguf" ] && ok "the model files are local" || bad "model not copied to $LD"
+[ -f "$LD/state/presets.json" ] && ok "presets and tuning are local" || bad "state not copied"
+[ ! -e "$LD/state/api-key" ] && ok "the API key file is not copied" || bad "api-key was copied"
+expect    "copy progress logging is on"           "copying the data from"
+OUT=$(env PATH="$T/bin:$PATH" STRATA_ENTRYPOINT="$T/entry-fake.sh" STRATA_BIN="$T/bin/strata" DATA_DIR="$LD" STRATA_STORE="$T/store" SYNC_WAIT=no STRATA_API_KEY=k1234567890123456 timeout 120 bash "$HERE/start.sh" 2>&1)
+expect_no "a second start does not copy again"    "copying the data from"
 
-echo "6. without an API key Strata is not started"
-OUT=$(env -u API_KEY -u STRATA_API_KEY PATH="$T/bin:$PATH" STRATA_STORE="$T/store" STRATA_LOCAL="$T/local" MODEL=IQ2_XS timeout 5 bash "$HERE/start.sh" 2>&1)
-expect    "refused"                               "NOT started"
+echo "4. COPY_DATA_LOCAL=no: the big files stay on the volume"
+run env COPY_DATA_LOCAL=no; settle
+LD=$(printf '%s' "$OUT" | sed -n 's/.*DATA=\(.*\)$/\1/p' | head -1)
+[ -L "$LD/Strata-data" ] && ok "Strata-data is a link to the store" || bad "Strata-data is not a link"
 
-echo "7. calibration per hardware (entries in Strata's settings.json): never by default; yes calibrates when none exists; a hardware change re-runs the setup"
-cat > "$T/cal.sh" <<'EOS'
-#!/bin/bash
-echo ran >> "$CALLOG"
-. /opt/runpod/hwinfo.sh
-CFGJ="$STRATA_DATA/config/strata-iq2_xs.json"
-K=$(strata_hwkey "$CFGJ")
-S="$XDG_CONFIG_HOME/strata/settings.json"; mkdir -p "$(dirname "$S")"; [ -f "$S" ] || echo '{}' > "$S"
-jq --arg k "$K" '.calibration[$k]={settings:{"--pcie-frac":"0.55","--spec-min-p":"0.30"},tok_s:1,date:"x"}' "$S" > "$S.t" && cat "$S.t" > "$S"
-jq '.args += ["--pcie-frac","0.55","--spec-min-p","0.30"]' "$CFGJ" > "$CFGJ.t" && cat "$CFGJ.t" > "$CFGJ"; rm -f "$S.t" "$CFGJ.t"
-EOS
-chmod +x "$T/cal.sh"
-CAL="CALIBRATE_SCRIPT=$T/cal.sh CALLOG=$T/cal.log"
-calls() { [ -f "$T/cal.log" ] && wc -l < "$T/cal.log" || echo 0; }
-fresh_pod; run env $CAL; settle
-[ "$(calls)" = 0 ] && ok "default: no calibration" || bad "default calibrated"
-[ -s "$T/local/Strata-data/config/.hw-key" ] && ok "the config records its hardware" || bad ".hw-key missing"
-fresh_pod; run env $CAL STRATA_CALIBRATE=yes; settle
-[ "$(calls)" = 1 ] && ok "yes, no entry for this hardware: calibrates" || bad "yes did not calibrate once ($(calls))"
-fresh_pod; run env $CAL STRATA_CALIBRATE=yes; settle
-[ "$(calls)" = 1 ] && ok "yes, entry exists: no new calibration" || bad "yes calibrated again"
-expect    "the calibrated values are in the config" '"--pcie-frac","0.55"'
-fresh_pod; run env $CAL STRATA_CALIBRATE=yes FAKE_GPU="Other GPU 32G"; settle
-expect    "other hardware: the setup runs again"  "set up on other hardware.*REINSTALL=1"
-[ "$(calls)" = 2 ] && ok "other hardware without an entry: calibrates" || bad "other hardware did not calibrate ($(calls))"
-run env $CAL FAKE_GPU="Fake GPU 24G"; settle
-expect    "back on the first hardware: setup again, its saved values return" '"--pcie-frac","0.55"'
-[ "$(calls)" = 2 ] && ok "no new calibration for known hardware" || bad "calibrated known hardware"
-rm -f "$T/local/Strata-data/config/.hw-key"
-run env $CAL; settle
-expect    "calibrated values of unknown hardware: setup again once" "unknown hardware.*REINSTALL=1"
-
-echo "9. a Strata release without docker-entrypoint.sh (0.2 layout): clear error; latest stays on the 0.1 line"
-fresh_pod
-OUT=$(env -u LOW_RAM -u API_KEY PATH="$T/bin:$PATH" STRATA_STORE="$T/store" STRATA_LOCAL="$T/local" STRATA_REPO="file://$T/upstream" \
-    MODEL=IQ2_XS PORT=8080 POOL_WORKERS=6 STRATA_API_KEY=k STRATA_REF=v0.2.0 timeout 60 bash "$HERE/start.sh" 2>&1)
-expect    "explains the missing docker-entrypoint.sh" "has no docker-entrypoint.sh"
-expect    "names the version that works"          "STRATA_REF=v0\.1\.45"
-fresh_pod; run env; settle
-expect    "latest ignores the 0.2 tag"            "engine key sm86-[0-9a-f]{8}-v0\.1\.2"
-
-echo "8. STRATA_PARALLEL: N sets --batch N, 1 removes it"
-fresh_pod; run env STRATA_PARALLEL=3; settle
-expect    "3: --batch 3 in the args"              '"--batch","3"'
-run env STRATA_PARALLEL=1; settle
-expect_no "1: --batch gone"                       '"--batch"'
+echo "5. sync.sh: the local data goes back to the store"
+mkdir -p "$T/syncdata/Strata-data/models" "$T/syncdata/state"
+echo new > "$T/syncdata/Strata-data/models/new.gguf"; echo k > "$T/syncdata/state/api-key"; echo log > "$T/syncdata/state/x.log"
+DATA_DIR="$T/syncdata" STRATA_STORE="$T/store" SYNC_WAIT=no bash "$HERE/sync.sh" > "$T/sync.out" 2>&1
+[ -f "$T/store/data/Strata-data/models/new.gguf" ] && ok "a new model file reaches the store" || bad "new file missing in the store"
+[ "$(cat "$T/store/data/state/api-key")" = "secret-key" ] && ok "the store's key file is untouched" || bad "api-key overwritten"
+[ ! -e "$T/store/data/state/x.log" ] && [ -f "$T/store/data/.complete" ] && ok "logs stay out, the store is marked complete" || bad "log copied or no .complete"
 
 echo
 [ "$FAILS" = 0 ] && echo "all tests passed" || echo "$FAILS test(s) failed"

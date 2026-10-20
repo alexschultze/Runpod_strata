@@ -1,3 +1,5 @@
+> **Branch `strata-v2-dev` (Strata 0.2):** Stand und Unterschiede siehe README.md / README_DETAILS.md; dieses Dokument beschreibt überwiegend die 0.1-Linie.
+
 # Aufgabenteilung: Cloud-Sitzung <-> lokaler Claude (SSH)
 
 Die Cloud-Sitzung hat nur HTTPS ueber einen Proxy (kein SSH, kein rohes TCP) und kann nicht auf den Pod.

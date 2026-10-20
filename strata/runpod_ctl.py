@@ -114,7 +114,7 @@ def main():
     ap.add_argument("--model", default="IQ2_XS"); ap.add_argument("--context", type=int, default=32768)
     ap.add_argument("--api-key-strata", default=os.environ.get("STRATA_API_KEY"))
     ap.add_argument("--copy-data-local", default="yes", choices=["yes", "no"])
-    ap.add_argument("--family", default="qwen"); ap.add_argument("--low-ram", default=None, choices=["auto", "on", "off", "resident", "mmap"], help="LOW_RAM; ohne Angabe entscheidet Strata")
+    ap.add_argument("--family", default="qwen"); ap.add_argument("--low-ram", default=None, choices=["auto", "on", "off", "resident", "mmap"], help="LOW_RAM (nur Strata 0.1 Image, in 0.2 ignoriert)")
     ap.add_argument("--env", action="append", default=[], metavar="KEY=VALUE", help="weitere Umgebungsvariable (wiederholbar)")
     ap.add_argument("--volume-gb", type=int, default=150)
     ap.add_argument("--container-gb", type=int, default=85, help="Container-Disk: Engine und Modelldaten liegen lokal unter /tmp (COPY_DATA_LOCAL=yes)")
