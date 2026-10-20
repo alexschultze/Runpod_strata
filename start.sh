@@ -81,6 +81,10 @@ if [ -n "$STRATA_STORE" ] && [ "$COPY_DATA_LOCAL" = yes ] && [ -d "$STRATA_STORE
     touch "$DATA/.local-complete"
 elif [ -n "$STRATA_STORE" ] && [ "$COPY_DATA_LOCAL" = no ]; then   # the big files stay on the volume: /data/Strata-data is a link to it
     mkdir -p "$STRATA_STORE/data/Strata-data"
+    # everything but the big files (presets, tuning, settings) is still copied to the local disk
+    if [ ! -f "$DATA/.local-complete" ] && [ -n "$(ls -A "$STRATA_STORE/data" 2>/dev/null)" ]; then
+        rsync -a --partial --exclude=/Strata-data --exclude=/state/api-key --exclude='*.log' "$STRATA_STORE/data/" "$DATA/" && touch "$DATA/.local-complete"
+    fi
     if [ ! -L "$DATA/Strata-data" ]; then
         if [ -d "$DATA/Strata-data" ] && [ -z "$(ls -A "$DATA/Strata-data" 2>/dev/null)" ]; then rmdir "$DATA/Strata-data"; fi
         [ -e "$DATA/Strata-data" ] || ln -s "$STRATA_STORE/data/Strata-data" "$DATA/Strata-data"

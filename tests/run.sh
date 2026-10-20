@@ -70,6 +70,9 @@ echo "4. COPY_DATA_LOCAL=no: the big files stay on the volume"
 run env COPY_DATA_LOCAL=no; settle
 LD=$(printf '%s' "$OUT" | sed -n 's/.*DATA=\(.*\)$/\1/p' | head -1)
 [ -L "$LD/Strata-data" ] && ok "Strata-data is a link to the store" || bad "Strata-data is not a link"
+[ -f "$LD/state/presets.json" ] && ok "presets and tuning are still copied locally" || bad "state not copied with COPY_DATA_LOCAL=no"
+SD=$(mktemp -d "$T/sdXXXX"); ln -s "$T/store/data/Strata-data" "$SD/Strata-data"; mkdir -p "$SD/state"; echo t > "$SD/state/tuned.json"
+DATA_DIR="$SD" STRATA_STORE="$T/store" SYNC_WAIT=no bash "$HERE/sync.sh" > "$T/sync2.out" 2>&1 && [ -f "$T/store/data/state/tuned.json" ] && [ -d "$T/store/data/Strata-data/models" ] && ok "sync with a linked Strata-data succeeds, the store keeps its files" || { bad "sync with link failed"; cat "$T/sync2.out"; }
 
 echo "5. sync.sh: the local data goes back to the store"
 mkdir -p "$T/syncdata/Strata-data/models" "$T/syncdata/state"

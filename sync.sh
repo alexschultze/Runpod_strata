@@ -12,4 +12,5 @@ if [ "${SYNC_WAIT:-yes}" != no ]; then
 fi
 mkdir -p "$STRATA_STORE/data"
 echo "$(date +%T) sync: $DATA -> $STRATA_STORE/data"
-rsync -a --partial --exclude=/state/api-key --exclude='*.log' --exclude=/.local-complete "$DATA/" "$STRATA_STORE/data/" && touch "$STRATA_STORE/data/.complete" && echo "$(date +%T) sync: done" || { echo "$(date +%T) sync: failed" >&2; exit 1; }
+[ -L "$DATA/Strata-data" ] && SKIP=--exclude=/Strata-data || SKIP=--exclude=/nothing   # COPY_DATA_LOCAL=no: the big files are already on the volume
+rsync -a --partial $SKIP --exclude=/state/api-key --exclude='*.log' --exclude=/.local-complete "$DATA/" "$STRATA_STORE/data/" && touch "$STRATA_STORE/data/.complete" && echo "$(date +%T) sync: done" || { echo "$(date +%T) sync: failed" >&2; exit 1; }
