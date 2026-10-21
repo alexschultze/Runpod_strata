@@ -1,7 +1,7 @@
 # Strata on Runpod
 
 > **Branch `strata-v2-dev`: Strata 0.2 integration, work in progress.** The image is built on Strata's own ready-made image (engine included, nothing is
-> compiled on the pod). Tested here with a fake Strata entrypoint only: **not yet started on a real GPU or on Runpod**. The stable line for Strata 0.1 is the
+> compiled on the pod). `v0.2.26` was started on Runpod and works (start time below); speed, Serverless modes and other GPU types are not measured yet. The stable line for Strata 0.1 is the
 > branch `claude/strata-runpod-deploy-zegtn6` (images `v0.1.<n>`); images of this branch are tagged `v0.2.<n>`.
 
 One Docker image that runs [Strata](https://github.com/Niko1221/Strata) (an OpenAI-compatible server for Qwen3.8-Flash-Next) on a Runpod
@@ -20,7 +20,7 @@ ghcr.io/alexschultze/strata-runpod:<tag>        # the tag of the latest successf
    at start, so a new worker does not download or tune again.
 3. **Tuning is per kind of card:** `TUNE=quick` runs Strata's quick tuning (about 20 minutes, once) for a preset that is named after the GPU
    (`docker-<gpu>-<vram>g`), so every card type is tuned once and keeps its result. Without it nothing is tuned.
-4. **Not measured yet on this branch:** start times, speed, the Docker options Strata recommends (`--ulimit memlock`, `--shm-size`) on Runpod, and which
+4. **Not measured yet on this branch:** speed, the Docker options Strata recommends (`--ulimit memlock`, `--shm-size`) on Runpod, and which
    GPU architectures the engine in the image covers (check with `strata components engine` in the container; the start log prints it).
 
 ## What you need
@@ -42,8 +42,7 @@ pod waits; run `/opt/runpod/start.sh` in `tmux` (or set `AUTO_START=yes` to star
 **Serverless:** create a queue-based endpoint with the image, a network volume in the same data center and an 85 GB container disk. Workers start
 Strata automatically (`MODE=queue` is the default there; set it yourself if your worker does not). Call `/runsync` or `/run`, or Runpod's OpenAI route (`https://api.runpod.ai/v2/<endpoint id>/openai/v1/...`).
 
-**The first request after idle waits for a worker to start** (image pull, copying the data to the local disk, loading the model; times not measured on this branch
-yet). Set client timeouts to 10-15 minutes and prefer `/run` + `/status/<id>` over `/runsync`. In LiteLLM: `timeout: 900`, `stream_timeout: 900`, `num_retries: 0`.
+**The first request after idle waits for a worker to start** (image pull, copying the data to the local disk, loading the model; start about 180 s with the model on the network volume; other cases not measured). Set client timeouts to 10-15 minutes and prefer `/run` + `/status/<id>` over `/runsync`. In LiteLLM: `timeout: 900`, `stream_timeout: 900`, `num_retries: 0`.
 
 ## The variables you will actually use
 
@@ -73,7 +72,7 @@ All other variables are listed in [README_DETAILS.md](README_DETAILS.md).
 
 | Case | Time |
 |---|---|
-| Worker starts, model and presets on the volume, copied to the local disk | not measured on this branch (the 0.1 line took about 3.5 minutes with the copy; there the engine restore is gone now) |
+| Worker starts, model and presets on the network volume in the pod's data center (`v0.2.26`) | **about 180 s** (reported by the project owner; GPU, mode and copy setting not recorded) |
 | Very first start, no model data on the volume | the model download (about 70 GB, not measured) plus Strata's preparation of the pack |
 | `TUNE=quick` on a card type nobody has tuned | + up to about 20 minutes (Strata's quick tuning), once per card type |
 | Image not yet cached on the host | + pull of the image (Strata's engine image is about 640 MB to download, ours adds SSH, Python and tools; not measured) |
