@@ -11,17 +11,23 @@ RP="${RUNPOD_DIR:-/opt/runpod}"; APP="${APP_DIR:-/app}"
 REPO="${SCRIPTS_REPO:-alexschultze/Runpod_strata}"
 case "$REPO" in *://*|git@*|/*) ;; *) REPO="https://github.com/${REPO%.git}.git" ;; esac
 W=$(mktemp -d) || exit 0; trap 'rm -rf "${W:?}"' EXIT
-if ! git clone -q --depth 1 --branch "$SCRIPTS_REF" "$REPO" "$W/r" 2>"$W/err"; then
-    # a commit SHA cannot be cloned with --branch: fetch it
-    if ! { git init -q "$W/r" && git -C "$W/r" fetch -q --depth 1 "$REPO" "$SCRIPTS_REF" 2>>"$W/err" && git -C "$W/r" checkout -q FETCH_HEAD; }; then
-        echo "update-scripts: could not fetch $REPO @ $SCRIPTS_REF ($(tail -1 "$W/err")), keeping the scripts of the image"; exit 0
-    fi
-fi
+mkdir -p "$W/r"
+case "$REPO" in
+    https://github.com/*)   # GitHub: a tarball of the ref (git is not in the image)
+        SLUG="${REPO#https://github.com/}"; SLUG="${SLUG%.git}"
+        if ! { curl -fsSL --max-time 60 "https://codeload.github.com/$SLUG/tar.gz/$SCRIPTS_REF" -o "$W/r.tgz" 2>"$W/err" && tar -xzf "$W/r.tgz" -C "$W/r" --strip-components=1 2>>"$W/err"; }; then
+            echo "update-scripts: could not fetch $SLUG @ $SCRIPTS_REF ($(tail -1 "$W/err")), keeping the scripts of the image"; exit 0
+        fi ;;
+    *)
+        if ! { command -v git >/dev/null && git clone -q --depth 1 --branch "$SCRIPTS_REF" "$REPO" "$W/g" 2>"$W/err" && mv "$W/g/"* "$W/g/".[!.]* "$W/r/" 2>/dev/null; }; then
+            echo "update-scripts: could not fetch $REPO @ $SCRIPTS_REF ($(tail -1 "$W/err" 2>/dev/null)), keeping the scripts of the image"; exit 0
+        fi ;;
+esac
 R="$W/r"; N=0
 for f in start.sh sshd.sh sync.sh volume-check.sh hwinfo.sh; do [ -f "$R/$f" ] && install -m 0755 "$R/$f" "$RP/$f" && N=$((N + 1)); done
 for f in proxy.py handler.py; do [ -f "$R/serverless/$f" ] && install -m 0644 "$R/serverless/$f" "$RP/$f" && N=$((N + 1)); done
 [ -d "$R/scripts" ] && mkdir -p "$APP/scripts" && cp -rf "$R/scripts/." "$APP/scripts/" && chmod +x "$APP"/scripts/*.sh 2>/dev/null
 [ -d "$R/strata/bench" ] && mkdir -p "$APP/bench" && cp -rf "$R/strata/bench/." "$APP/bench/"
-echo "update-scripts: $REPO @ $SCRIPTS_REF ($(git -C "$R" rev-parse --short HEAD)): $N files in $RP, scripts and bench in $APP"
+echo "update-scripts: $REPO @ $SCRIPTS_REF : $N files in $RP, scripts and bench in $APP"
 if [ -f "$R/entry.sh" ] && ! cmp -s "$R/entry.sh" "$RP/entry.sh"; then echo "update-scripts: note: entry.sh differs from the image's (not replaced; a new image is needed for it)"; fi
 exit 0
