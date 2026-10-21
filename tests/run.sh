@@ -68,6 +68,12 @@ expect    "copy progress logging is on"           "copying the data from"
 OUT=$(env PATH="$T/bin:$PATH" STRATA_ENTRYPOINT="$T/entry-fake.sh" STRATA_BIN="$T/bin/strata" DATA_DIR="$LD" STRATA_STORE="$T/store" SYNC_WAIT=no API_KEY=k1234567890123456 timeout 120 bash "$HERE/start.sh" 2>&1)
 expect_no "a second start does not copy again"    "copying the data from"
 
+mkdir -p "$T/store/data/home/run"; chmod 755 "$T/store/data/home/run"
+run env; settle
+LD=$(printf '%s' "$OUT" | sed -n 's/.*DATA=\(.*\)$/\1/p' | head -1)
+[ "$(stat -c %a "$LD/home/run")" = 700 ] && ok "directories copied from the volume are owner-only again" || bad "mode of home/run is $(stat -c %a "$LD/home/run")"
+rm -r "$T/store/data/home"
+
 echo "4. COPY_DATA_LOCAL=no: the big files stay on the volume"
 run env COPY_DATA_LOCAL=no; settle
 LD=$(printf '%s' "$OUT" | sed -n 's/.*DATA=\(.*\)$/\1/p' | head -1)

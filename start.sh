@@ -94,6 +94,9 @@ elif [ -n "$STRATA_STORE" ] && [ "$COPY_DATA_LOCAL" = no ]; then   # the big fil
     fi
 fi
 
+# The volume (FUSE) does not keep modes: what Strata made 0700 (its runtime directory) comes back 0755 and Strata refuses it. Everything under /data is private.
+chmod -R go-rwx "$DATA" 2>/dev/null || true
+
 # ---- Strata's settings from ours ------------------------------------------------------------------------------------------
 if [ -z "${PRESET:-}" ]; then PRESET="docker-$(hw_slug "$GPU_NAME")-${GPU_VRAM_GIB}g"; fi   # one preset (and so one tuning) per kind of card
 export PRESET
