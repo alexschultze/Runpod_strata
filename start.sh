@@ -96,6 +96,15 @@ fi
 
 # The volume (FUSE) does not keep modes: what Strata made 0700 (its runtime directory) comes back 0755 and Strata refuses it. Everything under /data is private.
 chmod -R go-rwx "$DATA" 2>/dev/null || true
+# Strata saves absolute paths (data folder, model files in the launch arguments) in its settings. A path into the store would make it read the model from the
+# network volume although the data is on the local disk: point every saved store path at /data (a link to the store when COPY_DATA_LOCAL=no).
+if [ -n "$STRATA_STORE" ] && [ "$STRATA_STORE/data" != "$DATA" ]; then
+    LIST=$(grep -rlF --include='*.json' --include='*.jsonl' "$STRATA_STORE/data" "$DATA/config" "$DATA/state" 2>/dev/null || true)
+    if [ -n "$LIST" ]; then
+        printf '%s\n' "$LIST" | xargs sed -i "s#$STRATA_STORE/data#$DATA#g"
+        echo "start.sh: $(printf '%s\n' "$LIST" | wc -l) settings file(s) pointed into the store ($STRATA_STORE/data): now $DATA"
+    fi
+fi
 
 # ---- Strata's settings from ours ------------------------------------------------------------------------------------------
 if [ -z "${PRESET:-}" ]; then PRESET="docker-$(hw_slug "$GPU_NAME")-${GPU_VRAM_GIB}g"; fi   # one preset (and so one tuning) per kind of card

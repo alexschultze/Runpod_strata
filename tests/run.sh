@@ -24,6 +24,7 @@ EOS
 printf '#!/bin/sh\n[ "$1 $2" = "components engine" ] && echo "engine: cuda, usable: yes, archs: sm_86" || echo other\n' > "$T/bin/strata"
 chmod +x "$T/bin/nvidia-smi" "$T/entry-fake.sh" "$T/bin/strata"
 mkdir -p "$T/store/data/state/strata/runtime" "$T/store/data/state/strata/procs"; echo old > "$T/store/data/state/strata/runtime/x.ready.json"; echo old > "$T/store/data/state/strata/procs/1.json"
+mkdir -p "$T/store/data/config/strata/launch-presets"; printf '{"args":"--native %s/store/data/Strata-data/models/m.gguf"}\n' "$T" > "$T/store/data/config/strata/launch-presets/p.json"
 echo "weights" > "$T/store/data/Strata-data/models/m.gguf"; echo "secret-key" > "$T/store/data/state/api-key"; echo '{}' > "$T/store/data/state/presets.json"
 
 run() {   # env assignments for this run; the output goes to $OUT. A new DATA_DIR per run unless one is given.
@@ -60,12 +61,14 @@ run env PRESET=mine LOW_RAM=on; settle
 expect    "an own preset name wins"               "PRESET=mine"
 expect    "LOW_RAM is said to be ignored"         "LOW_RAM is from the Strata 0.1 image and is ignored"
 
+printf '{"args":"--native %s/store/data/Strata-data/models/m.gguf"}\n' "$T" > "$T/store/data/config/strata/launch-presets/p.json"   # as Strata saved it on another pod
 echo "3. data: the store is copied to the local disk once, the key file stays behind"
 run env; settle
 LD=$(printf '%s' "$OUT" | sed -n 's/.*DATA=\(.*\)$/\1/p' | head -1)
 [ -f "$LD/Strata-data/models/m.gguf" ] && ok "the model files are local" || bad "model not copied to $LD"
 [ -f "$LD/state/presets.json" ] && ok "presets and tuning are local" || bad "state not copied"
 [ ! -e "$LD/state/api-key" ] && ok "the API key file is not copied" || bad "api-key was copied"
+grep -q "$LD/Strata-data/models/m.gguf" "$LD/config/strata/launch-presets/p.json" && ! grep -q "$T/store" "$LD/config/strata/launch-presets/p.json" && ok "saved paths into the store now point at the local data" || bad "preset still points into the store"
 [ ! -e "$LD/state/strata/runtime" ] && [ ! -e "$LD/state/strata/procs" ] && ok "runtime files of an old Strata are not copied back" || bad "runtime/procs were copied"
 expect    "copy progress logging is on"           "copying the data from"
 OUT=$(env PATH="$T/bin:$PATH" STRATA_ENTRYPOINT="$T/entry-fake.sh" STRATA_BIN="$T/bin/strata" DATA_DIR="$LD" STRATA_STORE="$T/store" SYNC_WAIT=no API_KEY=k1234567890123456 timeout 120 bash "$HERE/start.sh" 2>&1)
@@ -78,8 +81,10 @@ LD=$(printf '%s' "$OUT" | sed -n 's/.*DATA=\(.*\)$/\1/p' | head -1)
 rm -r "$T/store/data/home"
 
 echo "4. COPY_DATA_LOCAL=no: the big files stay on the volume"
+printf '{"args":"--native %s/store/data/Strata-data/models/m.gguf"}\n' "$T" > "$T/store/data/config/strata/launch-presets/p.json"   # as Strata saved it on another pod
 run env COPY_DATA_LOCAL=no; settle
 LD=$(printf '%s' "$OUT" | sed -n 's/.*DATA=\(.*\)$/\1/p' | head -1)
+grep -q "$LD/Strata-data/models" "$LD/config/strata/launch-presets/p.json" && ok "with the link too, saved paths use /data" || bad "preset path not rewritten (COPY_DATA_LOCAL=no)"
 [ -L "$LD/Strata-data" ] && ok "Strata-data is a link to the store" || bad "Strata-data is not a link"
 [ -f "$LD/state/presets.json" ] && ok "presets and tuning are still copied locally" || bad "state not copied with COPY_DATA_LOCAL=no"
 SD=$(mktemp -d "$T/sdXXXX"); ln -s "$T/store/data/Strata-data" "$SD/Strata-data"; mkdir -p "$SD/state"; echo t > "$SD/state/tuned.json"
