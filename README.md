@@ -81,10 +81,17 @@ At start the log shows an **info block** (GPU, VRAM, CPU, RAM, Runpod ids, URL),
 
 ## Measured performance (for reference)
 
-Decode speed (Strata, IQ2_XS): **about 150 tok/s** on an RTX PRO 4500 Blackwell (32 GB) with a calibration for that card
-(`--pcie-frac 1.00 --spec-min-p 0.70`, measured 163 tok/s by the calibration). **About 60 tok/s** on an L4 (22 GB) running with the settings
-calibrated for the Blackwell card: the cause is probably the smaller card and those settings, not confirmed yet (batch slots were set to 1 in that run).
-Strata's docs say batch slots (`PARALLEL`) can slow a single request down where the experts do not fit in VRAM; we measured no gain.
+Decode speed (Strata, IQ2_XS, `scripts/bench-local.sh`, which cycles through fixed prompts, so single runs vary with the prompt):
+
+| Setup | Median | Spread of single runs |
+|---|---|---|
+| `v0.2.26`, model read from the network volume (`COPY_DATA_LOCAL=no`), 15 runs | 128.5 tok/s | 76-206 tok/s |
+| `v0.2.27`, local copy (`COPY_DATA_LOCAL=yes`), 2 x 5 runs | 155 and 158 tok/s | 148-199 tok/s |
+
+Both on the project owner's pod (RTX PRO 4500 Blackwell 32 GB in the first row; GPU of the second row, `CONTEXT` and `PARALLEL` not recorded). The prompts that
+dropped to 76-116 tok/s from the network volume ran at 150-158 tok/s locally. Whether Strata read the model from the local disk in the second row was not
+checked (start log line `settings file(s) pointed into a volume store` or the open files of the Strata process). Earlier, on the 0.1 line: about 150 tok/s on that card
+with a calibration, about 60 tok/s on an L4 (22 GB). Strata's docs say batch slots (`PARALLEL`) can slow a single request down where the experts do not fit in VRAM; we measured no gain.
 
 Storage (fio, 1 MiB blocks unless noted; measured on pods by the project owner):
 
