@@ -18,10 +18,12 @@ printf '#!/bin/sh\ncase "$*" in *-L*) echo "GPU 0: Fake";; *query-gpu=name,memor
 # Strata's entrypoint in the image: here it only prints what it was given
 cat > "$T/entry-fake.sh" <<'EOS'
 #!/bin/sh
+[ -n "${FAKE_SLEEP:-}" ] && { echo "FAKE STRATA sleeping"; exec sleep 30; }
 echo "FAKE STRATA args=$* API_KEY=${API_KEY-unset} MODEL=$MODEL CONTEXT=$CONTEXT PRESET=${PRESET-} TUNE=${TUNE-unset} RETUNE=${RETUNE-unset} PARALLEL=${PARALLEL-unset} STRATA_SET=${STRATA_SET-unset} LOW_RAM=${LOW_RAM-unset}"
 EOS
 printf '#!/bin/sh\n[ "$1 $2" = "components engine" ] && echo "engine: cuda, usable: yes, archs: sm_86" || echo other\n' > "$T/bin/strata"
 chmod +x "$T/bin/nvidia-smi" "$T/entry-fake.sh" "$T/bin/strata"
+mkdir -p "$T/store/data/state/strata/runtime" "$T/store/data/state/strata/procs"; echo old > "$T/store/data/state/strata/runtime/x.ready.json"; echo old > "$T/store/data/state/strata/procs/1.json"
 echo "weights" > "$T/store/data/Strata-data/models/m.gguf"; echo "secret-key" > "$T/store/data/state/api-key"; echo '{}' > "$T/store/data/state/presets.json"
 
 run() {   # env assignments for this run; the output goes to $OUT. A new DATA_DIR per run unless one is given.
@@ -64,6 +66,7 @@ LD=$(printf '%s' "$OUT" | sed -n 's/.*DATA=\(.*\)$/\1/p' | head -1)
 [ -f "$LD/Strata-data/models/m.gguf" ] && ok "the model files are local" || bad "model not copied to $LD"
 [ -f "$LD/state/presets.json" ] && ok "presets and tuning are local" || bad "state not copied"
 [ ! -e "$LD/state/api-key" ] && ok "the API key file is not copied" || bad "api-key was copied"
+[ ! -e "$LD/state/strata/runtime" ] && [ ! -e "$LD/state/strata/procs" ] && ok "runtime files of an old Strata are not copied back" || bad "runtime/procs were copied"
 expect    "copy progress logging is on"           "copying the data from"
 OUT=$(env PATH="$T/bin:$PATH" STRATA_ENTRYPOINT="$T/entry-fake.sh" STRATA_BIN="$T/bin/strata" DATA_DIR="$LD" STRATA_STORE="$T/store" SYNC_WAIT=no API_KEY=k1234567890123456 timeout 120 bash "$HERE/start.sh" 2>&1)
 expect_no "a second start does not copy again"    "copying the data from"
@@ -84,11 +87,24 @@ DATA_DIR="$SD" STRATA_STORE="$T/store" SYNC_WAIT=no bash "$HERE/sync.sh" > "$T/s
 
 echo "5. sync.sh: the local data goes back to the store"
 mkdir -p "$T/syncdata/Strata-data/models" "$T/syncdata/state"
+mkdir -p "$T/syncdata/state/strata/runtime"; echo r > "$T/syncdata/state/strata/runtime/r.json"; echo l > "$T/syncdata/state/strata/p.lock"
 echo new > "$T/syncdata/Strata-data/models/new.gguf"; echo k > "$T/syncdata/state/api-key"; echo log > "$T/syncdata/state/x.log"
 DATA_DIR="$T/syncdata" STRATA_STORE="$T/store" SYNC_WAIT=no bash "$HERE/sync.sh" > "$T/sync.out" 2>&1
 [ -f "$T/store/data/Strata-data/models/new.gguf" ] && ok "a new model file reaches the store" || bad "new file missing in the store"
 [ "$(cat "$T/store/data/state/api-key")" = "secret-key" ] && ok "the store's key file is untouched" || bad "api-key overwritten"
 [ ! -e "$T/store/data/state/x.log" ] && [ -f "$T/store/data/.complete" ] && ok "logs stay out, the store is marked complete" || bad "log copied or no .complete"
+[ ! -e "$T/store/data/state/strata/runtime/r.json" ] && [ ! -e "$T/store/data/state/strata/p.lock" ] && ok "runtime files and locks stay out of the store" || bad "runtime or lock file reached the store"
+
+echo "6. shutdown: SIGTERM forwards to Strata and runs one last sync"
+D6=$(mktemp -d "$T/dataXXXX")
+env -u LOW_RAM -u TUNE -u RETUNE PATH="$T/bin:$PATH" STRATA_ENTRYPOINT="$T/entry-fake.sh" STRATA_BIN="$T/bin/strata" DATA_DIR="$D6" STRATA_STORE="$T/store" SYNC_WAIT=no \
+    API_KEY=k1234567890123456 FAKE_SLEEP=1 bash "$HERE/start.sh" > "$T/t6.out" 2>&1 &
+P6=$!
+for _ in $(seq 1 40); do grep -q "FAKE STRATA sleeping" "$T/t6.out" 2>/dev/null && break; sleep 0.5; done
+mkdir -p "$D6/state"; echo late > "$D6/state/late.json"
+kill -TERM "$P6"; wait "$P6" 2>/dev/null
+[ -f "$T/store/data/state/late.json" ] && ok "a file written after the first sync reaches the store at shutdown" || { bad "final sync did not run"; tail -5 "$T/t6.out"; }
+grep -q "final, at shutdown" "$T/store/logs/sync.log" && ok "the final sync is logged" || bad "no final sync in sync.log"
 
 echo
 [ "$FAILS" = 0 ] && echo "all tests passed" || echo "$FAILS test(s) failed"

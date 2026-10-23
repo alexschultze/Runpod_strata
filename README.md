@@ -114,4 +114,5 @@ At 1 $/hour and 150 tok/s the cost per million output tokens is about **3.70 $ a
   and keeps the result. Whether the engine in the image supports the card: the start log prints `strata components engine`.
 - **Strata reads the host's RAM,** not the pod's limit, when it plans (its entrypoint warns about a memory limit). `LOW_RAM` no longer exists in 0.2.
 - **Docker options Strata recommends** (`--ulimit memlock=-1:-1`, `--shm-size 2g`, `--stop-timeout 120`) cannot always be set on Runpod: untested there.
+- **What goes back to the volume:** `/data` is synced to the store once the model is loaded and once more at shutdown (SIGTERM, within the time Runpod gives). Runtime files of a running Strata (`state/strata/runtime`, `procs`, `*.lock`), the key file and logs are left out. Whether a preset is tuned: `/opt/strata/terminal/bin/strata launch --list-presets`.
 - **Debugging:** SSH in (`SSH_PUBLIC_KEY`), logs are in `<volume>/strata-store/v2/logs/` (`sync.log`) and in `/data/install` (Strata's logs).

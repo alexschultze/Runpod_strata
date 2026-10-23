@@ -80,13 +80,13 @@ if [ -n "$STRATA_STORE" ] && [ "$COPY_DATA_LOCAL" = yes ] && [ -d "$STRATA_STORE
     need=$(( SRC_BYTES / 1073741824 + 10 )); free=$(df -BG --output=avail "$DATA" | tail -1 | tr -dc 0-9)
     [ "$free" -ge "$need" ] || fail_alive "the container disk is too small: $need GiB needed under $DATA, $free GiB free. Raise the container disk (85 GB for the recommended model) or set COPY_DATA_LOCAL=no."
     echo "start.sh: copying the data from $STRATA_STORE/data to $DATA ($need GiB)"
-    progress_run "copying the data" "$DATA" "$SRC_BYTES" rsync -a --partial --exclude=/state/api-key --exclude='*.log' "$STRATA_STORE/data/" "$DATA/"
+    progress_run "copying the data" "$DATA" "$SRC_BYTES" rsync -a --partial --exclude=/state/api-key --exclude='*.log' --exclude=/state/strata/runtime/ --exclude=/state/strata/procs/ --exclude='*.lock' "$STRATA_STORE/data/" "$DATA/"
     touch "$DATA/.local-complete"
 elif [ -n "$STRATA_STORE" ] && [ "$COPY_DATA_LOCAL" = no ]; then   # the big files stay on the volume: /data/Strata-data is a link to it
     mkdir -p "$STRATA_STORE/data/Strata-data"
     # everything but the big files (presets, tuning, settings) is still copied to the local disk
     if [ ! -f "$DATA/.local-complete" ] && [ -n "$(ls -A "$STRATA_STORE/data" 2>/dev/null)" ]; then
-        rsync -a --partial --exclude=/Strata-data --exclude=/state/api-key --exclude='*.log' "$STRATA_STORE/data/" "$DATA/" && touch "$DATA/.local-complete"
+        rsync -a --partial --exclude=/Strata-data --exclude=/state/api-key --exclude='*.log' --exclude=/state/strata/runtime/ --exclude=/state/strata/procs/ --exclude='*.lock' "$STRATA_STORE/data/" "$DATA/" && touch "$DATA/.local-complete"
     fi
     if [ ! -L "$DATA/Strata-data" ]; then
         if [ -d "$DATA/Strata-data" ] && [ -z "$(ls -A "$DATA/Strata-data" 2>/dev/null)" ]; then rmdir "$DATA/Strata-data"; fi
@@ -108,12 +108,26 @@ if [ -n "$STRATA_STORE" ]; then
     SP_PORT=8080; [ "$MODE" = pod ] && SP_PORT="${PORT:-8080}"   # the port Strata listens on (queue and lb: always 8080)
     ( PORT="$SP_PORT" ionice -c3 nice -n 19 "$HERE/sync.sh" >> "$STRATA_STORE/logs/sync.log" 2>&1 & )
 fi
-if [ "$MODE" = pod ]; then exec "$ENTRY" run; fi
+
+# At shutdown (docker stop, Runpod stop: SIGTERM) or when Strata ends: one last sync of /data to the store (presets, tuning), while Strata unloads.
+FINAL_DONE=
+final_sync() {
+    [ -n "$STRATA_STORE" ] && [ -z "$FINAL_DONE" ] || return 0
+    FINAL_DONE=1
+    SYNC_WAIT=no SYNC_FINAL=1 PORT="$SP_PORT" "$HERE/sync.sh" >> "$STRATA_STORE/logs/sync.log" 2>&1 || true
+}
+if [ "$MODE" = pod ]; then
+    "$ENTRY" run & SP=$!
+    trap 'kill -TERM $SP 2>/dev/null; final_sync; wait $SP' TERM INT
+    rc=0; wait "$SP" || rc=$?
+    final_sync
+    exit "$rc"
+fi
 
 export STRATA_PORT=8080
 ( PORT=8080 "$ENTRY" run ) &
 SP=$!
-trap 'kill -TERM $SP 2>/dev/null; wait $SP' TERM INT
+trap 'kill -TERM $SP 2>/dev/null; final_sync; wait $SP' TERM INT
 PY=/opt/runpod/venv/bin/python
 if [ "$MODE" = lb ]; then
     LBP="${LB_PORT:-8000}"
@@ -122,4 +136,4 @@ else
     "$PY" -u "$HERE/handler.py" &
 fi
 wait $!
-kill -TERM $SP 2>/dev/null; wait $SP
+kill -TERM $SP 2>/dev/null; final_sync; wait $SP
