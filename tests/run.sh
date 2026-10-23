@@ -80,6 +80,11 @@ LD=$(printf '%s' "$OUT" | sed -n 's/.*DATA=\(.*\)$/\1/p' | head -1)
 [ "$(stat -c %a "$LD/home/run")" = 700 ] && ok "directories copied from the volume are owner-only again" || bad "mode of home/run is $(stat -c %a "$LD/home/run")"
 rm -r "$T/store/data/home"
 
+printf '{"args":"--native /runpod-volume/strata-store/v2/data/Strata-data/models/m.gguf --pack /workspace/strata-store/v2/data/Strata-data/packs/p"}\n' > "$T/store/data/config/strata/launch-presets/p.json"   # saved on a Pod and on Serverless
+run env; settle
+LD=$(printf '%s' "$OUT" | sed -n 's/.*DATA=\(.*\)$/\1/p' | head -1)
+! grep -qE "/runpod-volume|/workspace" "$LD/config/strata/launch-presets/p.json" && grep -q "$LD/Strata-data/packs/p" "$LD/config/strata/launch-presets/p.json" && ok "paths of the other kind of volume are fixed too" || { bad "other volume's paths remain"; cat "$LD/config/strata/launch-presets/p.json"; }
+
 echo "4. COPY_DATA_LOCAL=no: the big files stay on the volume"
 printf '{"args":"--native %s/store/data/Strata-data/models/m.gguf"}\n' "$T" > "$T/store/data/config/strata/launch-presets/p.json"   # as Strata saved it on another pod
 run env COPY_DATA_LOCAL=no; settle

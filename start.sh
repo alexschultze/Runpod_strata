@@ -98,11 +98,15 @@ fi
 chmod -R go-rwx "$DATA" 2>/dev/null || true
 # Strata saves absolute paths (data folder, model files in the launch arguments) in its settings. A path into the store would make it read the model from the
 # network volume although the data is on the local disk: point every saved store path at /data (a link to the store when COPY_DATA_LOCAL=no).
-if [ -n "$STRATA_STORE" ] && [ "$STRATA_STORE/data" != "$DATA" ]; then
-    LIST=$(grep -rlF --include='*.json' --include='*.jsonl' "$STRATA_STORE/data" "$DATA/config" "$DATA/state" 2>/dev/null || true)
+if [ -n "$STRATA_STORE" ]; then   # the store is /workspace/... on a Pod and /runpod-volume/... on Serverless: settings saved on the other kind are fixed too
+    PATS=()
+    for P in "$STRATA_STORE/data" /workspace/strata-store/v2/data /runpod-volume/strata-store/v2/data; do
+        [ "$P" != "$DATA" ] && [[ " ${PATS[*]:-} " != *" $P "* ]] && PATS+=("$P")
+    done
+    LIST=$(for P in "${PATS[@]}"; do grep -rlF --include='*.json' --include='*.jsonl' "$P" "$DATA/config" "$DATA/state" 2>/dev/null; done | sort -u || true)
     if [ -n "$LIST" ]; then
-        printf '%s\n' "$LIST" | xargs sed -i "s#$STRATA_STORE/data#$DATA#g"
-        echo "start.sh: $(printf '%s\n' "$LIST" | wc -l) settings file(s) pointed into the store ($STRATA_STORE/data): now $DATA"
+        for P in "${PATS[@]}"; do printf '%s\n' "$LIST" | xargs sed -i "s#$P#$DATA#g"; done
+        echo "start.sh: $(printf '%s\n' "$LIST" | wc -l) settings file(s) pointed into a volume store: now $DATA"
     fi
 fi
 
