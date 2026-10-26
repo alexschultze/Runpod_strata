@@ -1,89 +1,78 @@
-# LAN over serial: architecture
+# USB NAT bridge (ESP32-S3): architecture, rev 2
+
+Supersedes the serial/proxy design (removed): a proxy needs every app to cooperate, and without a
+PC driver there is no way to capture arbitrary IP traffic and push it down a serial line.
+The only driver-free way to get *transparent* connectivity is for the ESP32 to **be** a network adapter.
 
 ```
- Network A                BRIDGE PC (Windows 11)                       Network B
-┌──────────┐   ┌───────────────────────────────────────┐        ┌────────────────────┐
-│ apps /   │   │ Python (asyncio)                      │  USB   │ ESP32-S3           │   Wi-Fi   ┌───────┐
-│ clients  ├──►│ SOCKS5 + port forwards (127.0.0.1/LAN)├──CDC──►│ socket gateway     ├──────────►│ hosts │
-│          │   │ mux/demux, flow control, reconnect    │ serial │ lwIP, Wi-Fi STA    │ (net B)   └───────┘
-└──────────┘   └───────────────────────────────────────┘        └────────────────────┘
+ BRIDGE PC (Windows 11)                    ESP32-S3                                  Network B
+┌──────────────────────┐   USB (NCM,     ┌─────────────────────────────┐  Wi-Fi STA  ┌───────────┐
+│ "USB Ethernet" NIC   │◄── inbox drv ──►│ lwIP netif "usb" 10.254.77.1│  (DHCP, IP  │ router,   │
+│ 10.254.77.2 (DHCP)   │   12 Mbit/s     │   DHCP server, DNS relay    │   unknown   │ hosts     │
+│ Python control client│── HTTP :80 ────►│   NAPT ──────────────────►  │   in advance)──►         │
+└──────────────────────┘                 │ netif "wifi" x.x.x.x (B)    │             └───────────┘
+                                         └─────────────────────────────┘
 ```
 
-## Constraints and what they force
+## How it works
 
-| Constraint | Consequence |
-|---|---|
-| Windows 11, **no additional drivers** | The ESP32-S3 must use its **native USB port** (GPIO19/20), which enumerates as a standard CDC-ACM device. Windows binds its inbox `usbser.sys` automatically; it appears as a COM port. Boards' UART-bridge port (CP210x/CH340) needs a vendor driver: do not use it. `pyserial` is a pip package, not a driver. |
-| No driver means **no virtual NIC** | TAP/Wintun/Npcap cannot be installed, so the PC cannot get a tunnel interface or inject raw frames. "LAN over serial" is therefore built at **L4 (TCP/UDP), in user space**: the PC runs a proxy, the ESP32 is the egress onto network B. |
-| ESP32-S3 joins a different network | It is a Wi-Fi **station** on network B with its own IP there. All traffic leaves network A's side as the ESP32's IP (NAT-like). Network B hosts see the ESP32, not the PC. |
-
-Not provided (inherent to the no-driver choice): ping/ICMP from the PC, broadcast/multicast discovery (mDNS, SSDP, DHCP), non-TCP/UDP protocols, and apps that cannot use a SOCKS5 proxy or a configured port forward. A true L2/L3 bridge would need a driver on the PC and is out of scope.
+* **USB**: the ESP32-S3 native USB port (GPIO19/20, TinyUSB) enumerates as a CDC-**NCM** Ethernet device
+  (RNDIS selectable as fallback). Windows 11 binds its inbox class driver; no installation. (CDC-ECM is *not*
+  supported by Windows, so don't use it.)
+* **NAT**: lwIP **NAPT** on the ESP32 translates everything from the USB side to the ESP32's Wi-Fi address.
+  Network B only ever sees the ESP32's DHCP-assigned IP, which nobody has to know in advance. The PC (the
+  "bridge's network") sees only the fixed private USB subnet.
+* **Addressing**: ESP32 runs a DHCP server on the USB side (default `10.254.77.0/24`, unusual on purpose; the
+  firmware must pick another /24 if network B's learned subnet collides, otherwise NAT breaks). DHCP hands out
+  the ESP32's own address as DNS server, which relays to the DNS learned from network B.
+* **Routing on the PC**: by default the ESP32 offers **no default gateway**, so Windows keeps using its normal
+  uplink for everything else. Destinations on network B are added as routes via `10.254.77.1` (DHCP option 121
+  from the ESP32, or `route add`/`New-NetRoute` by the Python helper; both built into Windows, admin needed
+  only for the latter). A "full tunnel" mode (ESP32 gives a default gateway, lower metric) is optional.
+* **Inbound from network B**: NAT is outbound-only. Reachability of PC services from B is by explicit
+  port mappings (NAPT port-forward: ESP32 `wifi_ip:port` → `10.254.77.2:port`), managed from Python.
+* **Optional**: other hosts on the PC's LAN A can use the PC as a gateway (Windows IP forwarding, built in:
+  `Set-NetIPInterface -Forwarding Enabled` on both NICs, plus a route to B via the PC on those hosts). They are
+  then double-NATed (their source IPs also get translated by the ESP32).
 
 ## Components
 
-### 1. PC side (`host/serialbridge`, Python 3.10+, `pip install pyserial`)
+### ESP32-S3 firmware (ESP-IDF; start from Espressif's `esp-iot-bridge` component)
+`esp-iot-bridge` already implements "Wi-Fi station as WAN + USB (NCM/RNDIS) as LAN with NAT, DHCP server and DNS
+forwarding" for ESP32-S2/S3. Verify the NCM option and the IDF version in its current docs; otherwise build the
+same from `esp_tinyusb` + `esp_netif` + `CONFIG_LWIP_IPV4_NAPT`.
+Additions on top:
+* Control REST API on `http://10.254.77.1/` (USB side only, never exposed on Wi-Fi): `PUT /wifi {ssid,psk}`,
+  `GET /status` (Wi-Fi state, B-side IP/GW/DNS, RSSI, NAT table size, USB/WiFi byte counters),
+  `GET/POST/DELETE /portmap`, `POST /reboot`. Credentials live in NVS.
+* Subnet-conflict handling, link watchdog (reconnect Wi-Fi with backoff), NAT table sizing and entry timeouts.
 
-* **Serial link**: opens the COM port (auto-detect by USB VID 0x303A, or `--port COM7`). A reader thread feeds the `Deframer`; a writer queue serialises frames. Reconnects when the device is replugged or reset (the ESP32-S3 re-enumerates), then re-sends Wi-Fi config and re-opens listeners.
-* **Mux**: every proxied connection is a *channel* (u16). The PC allocates channel ids for outbound opens, the ESP32 for inbound accepts (high bit set to avoid collisions).
-* **Front ends** (all asyncio servers):
-  * **SOCKS5** (CONNECT, UDP ASSOCIATE, domain names resolved *on the ESP32* so DNS follows network B). Point browsers, `curl --socks5-hostname`, and most tools at it.
-  * **Static forwards**: `-L 127.0.0.1:8080=192.168.50.10:80` for apps without proxy support (RDP, SSH, databases).
-  * **Reverse forwards**: `-R 2222=127.0.0.1:22` makes the ESP32 listen on network B port 2222 and tunnel connections to a service on the PC / network A.
-* **Config/CLI**: `python -m serialbridge --wifi-ssid ... --socks 1080 -L ... -R ...`; Wi-Fi credentials are sent over the link and stored in the ESP32's NVS, so the firmware never needs reflashing to change networks.
+### PC side (Python 3.10+, standard library only)
+No serial port and no `pyserial` any more; the PC talks to the ESP32 over the network it provides.
+* `bridgectl`: discovers the adapter (by name/MAC via PowerShell `Get-NetAdapter`), waits for `10.254.77.1`,
+  provisions Wi-Fi, reads status, manages port mappings, and installs/removes routes to the chosen network-B
+  prefixes (`route add`). `bridgectl status|wifi|route|portmap`.
+* Optional small tray/service loop that re-applies routes after the adapter re-enumerates.
 
-### 2. ESP32-S3 firmware (ESP-IDF, FreeRTOS)
+## Performance (estimates)
 
-* **USB**: TinyUSB CDC-ACM on the native port (or the built-in USB-Serial/JTAG peripheral as the simplest start). Full speed 12 Mbit/s: roughly 0.8-1 MB/s real throughput, above typical ESP32 Wi-Fi throughput, so USB is not the bottleneck.
-* **Tasks**: `usb_rx` (deframe, dispatch) → per-channel state; `usb_tx` (single queue so frames never interleave); `net` task running `select()` over all channel sockets.
-* **Channel table**: up to 16 sockets (raise `LWIP_MAX_SOCKETS`/`CONFIG_LWIP_MAX_SOCKETS`). Each holds an fd, the PC-granted send credit, and a small TX ring.
-* **Wi-Fi manager**: STA with auto-reconnect; reports state/IP/RSSI via `WIFI_STATUS`. Optional fallback SoftAP is not needed.
-* **Watchdog**: if no `PING` arrives for 10 s, close all channels and wait for the host (prevents orphaned sockets after the PC app dies).
+USB full speed (the S3 has no high-speed USB) caps at ~1.2 MB/s total; expect **~0.8-1 MB/s, shared both ways**,
+added latency ~2-5 ms. Wi-Fi (single-stream 2.4 GHz n) and NAPT on the S3 can each carry more, so USB remains the
+limit. Concurrent connections are bounded by the NAT table (default few hundred; configure) and RAM.
 
-## Protocol (implemented in `host/serialbridge/protocol.py`)
+## Limitations
 
-Framing: `COBS(type u8 | flags u8 | chan u16 | payload | crc32) 0x00`. The 0x00 delimiter gives instant resync after garbage or a mid-frame reset; the CRC catches corruption (USB itself is reliable, this guards against firmware bugs and noisy true-UART use). Payload ≤ 1024 B.
-
-| Type | Direction | Purpose |
-|---|---|---|
-| HELLO / PING / PONG | both | version/capabilities, 2 s keepalive, RTT |
-| WIFI_SET / WIFI_STATUS | PC→ESP / ESP→PC | provision and observe network B link |
-| OPEN_TCP / OPEN_UDP / LISTEN | PC→ESP | create channel to `host:port` on net B, or listen there |
-| OPEN_RES / ACCEPT | ESP→PC | result (errno-like status) / inbound connection |
-| DATA | both | stream bytes |
-| CREDIT | both | **flow control**: receiver grants N more bytes |
-| CLOSE | both | half/full close with reason in flags |
-| RESOLVE / RESOLVE_RES | PC↔ESP | DNS on network B |
-| DGRAM | both | UDP datagram (`ip:port` + data) |
-
-**Flow control** is per channel and credit-based (initial window 8 KiB, topped up as the consumer drains). A slow TCP peer on one channel therefore never blocks the others or overflows the ESP32's few hundred KB of RAM; this is the one property that makes multiplexing over a single serial pipe safe.
-
-## Data flow example (browser → host on network B)
-
-1. Browser connects to PC `127.0.0.1:1080` (SOCKS5), asks for `intranet.local:80`.
-2. Python allocates channel 5, sends `OPEN_TCP(5, 80, "intranet.local")`.
-3. ESP32 resolves via network B's DNS, `connect()`s, replies `OPEN_RES(5, ok, credit)`.
-4. Python answers the SOCKS5 success; bytes now flow as `DATA` frames both ways, throttled by `CREDIT`.
-5. Either side closing sends `CLOSE(5)`; the other side shuts its socket.
-
-## Failure behaviour
-
-* USB unplug/reset: host drops all channels (clients see a normal TCP reset), reconnects the COM port, re-provisions Wi-Fi, restores listeners.
-* Wi-Fi loss: `WIFI_STATUS` pushed; new opens fail fast with a status code; existing channels reset.
-* Host crash: ESP32 watchdog closes sockets.
-
-## Security
-
-The link is physically point-to-point, but anything on network B can reach reverse-forward listeners and anything on the PC can use the SOCKS port. Bind the SOCKS/forwards to `127.0.0.1` by default, make reverse-forward listeners opt-in with a source allow-list, and keep Wi-Fi credentials only in ESP32 NVS (enable flash encryption for production).
+* 2.4 GHz Wi-Fi only; captive-portal or enterprise networks need extra firmware work (WPA2-Enterprise is supported by IDF).
+* lwIP NAPT handles TCP/UDP/ICMP echo only; no IPv6, no protocols such as GRE/IPsec ESP passthrough.
+* The ESP32 is not a full firewall; anything from the PC is NATed out. Keep the REST API USB-side only.
+* Windows classifies the adapter as a new "unidentified" network; set it to Private/ignore as needed.
 
 ## Build plan
+1. Firmware: Wi-Fi STA + USB NCM + DHCP + NAPT working (ping/HTTP from the PC to network B).
+2. Verify Windows 11 binding with no manual driver step; fall back to RNDIS if a target PC lacks NCM.
+3. REST control API + NVS credentials + subnet-conflict logic.
+4. `bridgectl` (routes, Wi-Fi, portmaps).
+5. Soak: throughput ≥ 0.8 MB/s, many connections, hot-unplug, Wi-Fi drop recovery.
 
-1. **Done here**: wire protocol + tests (`python tests/test_protocol.py`).
-2. Host: serial link with reconnect, channel mux with credit flow control, SOCKS5 front end.
-3. Firmware skeleton: TinyUSB CDC + framing + Wi-Fi + TCP channels.
-4. UDP, DNS, reverse forwards.
-5. Throughput/soak tests (target: ≥ 1 MB/s aggregate, 16 concurrent channels, hot-unplug recovery).
-
-## Open choices for you
-
-* **Native USB CDC (recommended)** vs. a WinUSB vendor interface (faster/cleaner, still driver-free on Win10+ via MS OS 2.0 descriptors, but needs `libusb`/`pyusb` DLLs on the PC).
-* Whether UDP and reverse forwards are needed in v1.
+## Open question
+Should only the bridge PC use the link (default), or should other hosts on its LAN A also route through it?
