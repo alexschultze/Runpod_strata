@@ -45,6 +45,34 @@ RESOLVE, DGRAM. **Per-channel credit flow control** (8 KiB initial window) so on
 USB full speed: ~0.8-1 MB/s total, shared both ways, +2-5 ms latency. Wi-Fi 2.4 GHz only. 16 concurrent connections
 (lwIP socket limit, configurable). TCP and UDP only: no ping, no broadcast/multicast discovery, no other IP protocols.
 
-## Build plan
-1. Done: framing + tests. 2. Host link, mux, credit flow control. 3. Firmware: CDC + framing + Wi-Fi + TCP.
-4. DNAT table + SOCKS5. 5. UDP, DNS, inbound mappings. 6. Soak and hot-unplug tests.
+## Primary workload: OpenAI-style HTTP(S) completions, including streaming
+
+This fits connection-level NAT well: HTTP and SSE are plain TCP streams, so the tunnel never parses or buffers them.
+* **Front ends, in priority order**
+  1. **HTTP CONNECT proxy** (new, v1): point the client at it with `HTTPS_PROXY=http://127.0.0.1:3128`. The OpenAI
+     Python/Node SDKs and curl honour this. TLS stays **end-to-end** between client and API, so certificates verify
+     against the real hostname and the ESP32 never does TLS (no mbedTLS RAM cost, no CA store to maintain).
+  2. **Mapped port** for plain-HTTP upstreams on network B (e.g. a local vLLM/llama.cpp server): set
+     `base_url=http://PC:8080/v1`. A TLS upstream cannot use a mapped port (hostname mismatch); use the proxy.
+  3. SOCKS5 for non-HTTP clients (later).
+* **Streaming (SSE)**: no buffering anywhere. The ESP32 sets `TCP_NODELAY`, forwards each socket read as one DATA frame
+  immediately, and the PC writes straight through (`drain()` only for backpressure). Added latency per token chunk is
+  ~2-5 ms, invisible next to model latency.
+* **Timeouts**: first-token latency can be minutes (cold GPU worker). No idle timeout on an established TCP channel;
+  TCP keepalive on the ESP32 side, bridge keepalives (PING every 2 s) on the serial side. Only closed on FIN/RST,
+  host-silence (watchdog), or Wi-Fi loss, after which clients see a normal connection reset and retry.
+* **Bandwidth**: prompts and token streams are kilobytes; even long contexts or base64 images (MBs) take seconds
+  at ~0.8 MB/s. Not a limit for this workload.
+* **Connection count**: each in-flight request, and each idle keep-alive connection in the client's pool, holds
+  one channel (max 16). The bridge answers CONNECT with `503` when the table is full and closes idle channels
+  (default 60 s without data between requests, configurable; never during an active stream) so pools cannot starve it.
+* **Resilience**: in-flight streams are lost if the USB cable is pulled or Wi-Fi drops (cannot be resumed); the
+  gateway reconnects automatically and retries by the client work.
+
+## Build plan (re-ordered for the primary workload)
+1. Done: framing + tests.
+2. Host: serial link with reconnect, channel mux, credit flow control.
+3. Firmware: CDC-ACM + framing + Wi-Fi + TCP channels (+ DNS on ESP32).
+4. HTTP CONNECT proxy and mapped ports. **End-to-end test: OpenAI SDK, streaming chat completion through the bridge.**
+5. Idle-channel reaping, soak/hot-unplug tests.
+6. Later/optional: SOCKS5, UDP, inbound mappings.
