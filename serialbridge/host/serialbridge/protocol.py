@@ -20,9 +20,9 @@ class T(IntEnum):
     WIFI_STATUS = 0x11   # payload: state u8 | ip4 | gw4 | rssi i8
     OPEN_TCP = 0x20      # chan = new channel id; payload: port u16 | host (utf8, name or ip)
     OPEN_UDP = 0x21
-    LISTEN = 0x22        # payload: port u16 (ESP32 listens on network B)
+    LISTEN = 0x22        # chan = listener id; payload: port u16 (ESP32 listens on its Wi-Fi network)
     OPEN_RES = 0x23      # payload: status u8 (0 = ok) | initial credit u32
-    ACCEPT = 0x24        # chan = new inbound channel; payload: peer ip4 | peer port u16
+    ACCEPT = 0x24        # chan = new inbound channel; payload: listener id u16 | peer ip4 | peer port u16
     DATA = 0x30
     CREDIT = 0x31        # payload: bytes u32 the sender may send additionally
     CLOSE = 0x32
