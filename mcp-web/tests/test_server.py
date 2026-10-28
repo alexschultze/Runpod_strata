@@ -39,32 +39,6 @@ def test_tools_registered():
     assert names == {"websearch", "webfetch"}
 
 
-def test_search_parses_sse(patch):
-    seen = {}
-
-    def handler(req):
-        seen.update(json.loads(req.content))
-        body = "event: message\ndata: " + json.dumps({"result": {"content": [{"type": "text", "text": "RESULT"}]}}) + "\n\n"
-        return httpx.Response(200, text=body)
-
-    patch(handler)
-    assert run(server.websearch("q", num_results=3, type="fast")) == "RESULT"
-    args = seen["params"]["arguments"]
-    assert seen["params"]["name"] == "web_search_exa"
-    assert args == {"query": "q", "type": "fast", "numResults": 3, "livecrawl": "fallback"}
-
-
-def test_search_empty(patch):
-    patch(lambda r: httpx.Response(200, text="data: " + json.dumps({"result": {"content": []}})))
-    assert "No search results" in run(server.websearch("q"))
-
-
-def test_search_error(patch):
-    patch(lambda r: httpx.Response(500, text="boom"))
-    with pytest.raises(RuntimeError, match="500"):
-        run(server.websearch("q"))
-
-
 def test_fetch_markdown(patch):
     patch(lambda r: httpx.Response(200, text=HTML, headers={"content-type": "text/html"}))
     out = run(server.webfetch("https://x.test/"))

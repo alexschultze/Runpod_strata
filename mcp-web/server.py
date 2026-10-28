@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """MCP server with `websearch` and `webfetch` tools, modelled on opencode's tools of the same name.
 
-websearch  Exa's hosted MCP endpoint (tool web_search_exa), no API key required.
+websearch  Exa, Firecrawl, Parallel, Tavily or TinyFish (all usable without a key). By default ("random") one is
+           picked at random and kept until it answers HTTP 429, then another takes over, like opencode.
 webfetch   Fetches a URL and returns it as markdown (default), plain text or raw HTML.
            5 MB response limit, 30 s default / 120 s max timeout, retry with a plain
            User-Agent when Cloudflare challenges a browser-like one, images returned as images.
@@ -9,7 +10,6 @@ webfetch   Fetches a URL and returns it as markdown (default), plain text or raw
 Run:  python server.py                     (stdio)
       MCP_TRANSPORT=streamable-http python server.py   (HTTP on MCP_HOST:MCP_PORT)
 """
-import json
 import os
 from typing import Literal
 
@@ -18,10 +18,7 @@ from bs4 import BeautifulSoup
 from markdownify import MarkdownConverter
 from mcp.server.fastmcp import FastMCP, Image
 
-EXA_URL = os.environ.get("EXA_MCP_URL", "https://mcp.exa.ai/mcp")
-EXA_API_KEY = os.environ.get("EXA_API_KEY")
-SEARCH_TIMEOUT = 25.0
-DEFAULT_NUM_RESULTS = 8
+from search_providers import Searcher, format_results
 
 MAX_RESPONSE_SIZE = 5 * 1024 * 1024
 DEFAULT_TIMEOUT = 30
@@ -45,64 +42,24 @@ mcp = FastMCP(
 
 # --------------------------------------------------------------------------- websearch
 
-def _parse_exa_response(body: str) -> str | None:
-    """Exa answers with SSE ('data: {json-rpc}') or plain JSON; return the first text content."""
-    candidates = [line[6:] for line in body.splitlines() if line.startswith("data: ")] or [body]
-    for raw in candidates:
-        try:
-            msg = json.loads(raw)
-        except ValueError:
-            continue
-        content = (msg.get("result") or {}).get("content") or []
-        if content and content[0].get("text"):
-            return content[0]["text"]
-    return None
+searcher = Searcher(selection=os.environ.get("WEBSEARCH_PROVIDER", "random").strip().lower())
+ProviderName = Literal["exa", "firecrawl", "parallel", "tavily", "tinyfish"]
 
 
 @mcp.tool()
-async def websearch(
-    query: str,
-    num_results: int = DEFAULT_NUM_RESULTS,
-    livecrawl: Literal["fallback", "preferred"] = "fallback",
-    type: Literal["auto", "fast", "deep"] = "auto",
-    context_max_characters: int | None = None,
-) -> str:
-    """Search the web using Exa AI. Returns search results with content optimised for LLMs.
+async def websearch(query: str, provider: ProviderName | None = None) -> str:
+    """Search the web. Returns the top results (title, URL, published date, content excerpts).
 
     Use for current events, recent information and anything beyond your knowledge cutoff.
-    Include the current year in queries about recent material.
+    Include the current year in queries about recent material. Follow up with webfetch to read a result.
 
     Args:
         query: Web search query.
-        num_results: Number of results to return (default 8).
-        livecrawl: 'fallback' uses live crawling only if no cache exists; 'preferred' prioritises live crawling.
-        type: Search type: 'auto' (balanced, default), 'fast' (quick) or 'deep' (comprehensive).
-        context_max_characters: Maximum characters of context returned for the LLM (default 10000).
+        provider: Optional search provider (exa, firecrawl, parallel, tavily, tinyfish). Normally omitted:
+            the server picks one (see WEBSEARCH_PROVIDER) and switches provider when one is rate limited.
     """
-    arguments: dict = {
-        "query": query,
-        "type": type,
-        "numResults": num_results,
-        "livecrawl": livecrawl,
-    }
-    if context_max_characters is not None:
-        arguments["contextMaxCharacters"] = context_max_characters
-    payload = {
-        "jsonrpc": "2.0",
-        "id": 1,
-        "method": "tools/call",
-        "params": {"name": "web_search_exa", "arguments": arguments},
-    }
-    params = {"exaApiKey": EXA_API_KEY} if EXA_API_KEY else None
-    headers = {"accept": "application/json, text/event-stream", "content-type": "application/json"}
-    try:
-        async with httpx.AsyncClient(timeout=SEARCH_TIMEOUT) as client:
-            resp = await client.post(EXA_URL, json=payload, headers=headers, params=params)
-    except httpx.TimeoutException:
-        raise RuntimeError("Search request timed out")
-    if resp.status_code != 200:
-        raise RuntimeError(f"Search error ({resp.status_code}): {resp.text[:500]}")
-    return _parse_exa_response(resp.text) or "No search results found. Please try a different query."
+    used, results = await searcher.query(query, provider)
+    return format_results(used, results)
 
 
 # --------------------------------------------------------------------------- webfetch
