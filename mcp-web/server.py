@@ -18,6 +18,7 @@ from bs4 import BeautifulSoup
 from markdownify import MarkdownConverter
 from mcp.server.fastmcp import FastMCP, Image
 
+from http_client import new_client
 from search_providers import Searcher, format_results
 
 MAX_RESPONSE_SIZE = 5 * 1024 * 1024
@@ -124,7 +125,7 @@ async def webfetch(
         "Accept-Language": "en-US,en;q=0.9",
     }
     try:
-        async with httpx.AsyncClient(timeout=seconds, follow_redirects=True) as client:
+        async with new_client(timeout=seconds, follow_redirects=True) as client:
             resp, body = await _get(client, url, headers)
             # Cloudflare bot challenge blocks browser-like UAs that lack a real fingerprint; an honest UA passes.
             if resp.status_code == 403 and resp.headers.get("cf-mitigated") == "challenge":

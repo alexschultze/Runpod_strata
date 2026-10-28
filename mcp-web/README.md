@@ -17,6 +17,10 @@ MCP server providing `websearch` and `webfetch`, copied from the behaviour of th
 
 The tool's optional `provider` argument overrides the setting for one call. Keys: `EXA_API_KEY`, `FIRECRAWL_API_KEY`, `PARALLEL_API_KEY`, `TAVILY_API_KEY`, `TINYFISH_API_KEY`. Note: Firecrawl's keyless quota is small and often used up (reported as an error), so set its key or choose another provider.
 
+## Proxy
+
+Every outbound call (both tools, all providers) is made through `http_client.new_client()`, which uses `WEB_PROXY` from `http_client.py`. It is hard coded to `"none"`: no proxy, and `HTTP_PROXY`/`HTTPS_PROXY`/`ALL_PROXY` in the environment are ignored. Set it to a proxy URL (e.g. `"http://host:3128"`) to route all web calls through it.
+
 ## Run
 
 ```bash

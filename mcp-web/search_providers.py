@@ -14,6 +14,8 @@ from typing import Awaitable, Callable
 
 import httpx
 
+from http_client import new_client
+
 TIMEOUT = 25.0
 MAX_RESPONSE_BYTES = 256 * 1024
 NUM_RESULTS = 8
@@ -268,7 +270,7 @@ class Searcher:
             if cooldown is None or cooldown[0] <= self.clock():
                 attempted.add(provider)
                 try:
-                    async with httpx.AsyncClient(timeout=TIMEOUT, follow_redirects=True) as client:
+                    async with new_client(timeout=TIMEOUT, follow_redirects=True) as client:
                         return provider, await PROVIDERS[provider][1](client, query)
                 except httpx.TimeoutException as e:
                     error = SearchError(provider, RuntimeError("request timed out"))
