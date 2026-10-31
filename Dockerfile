@@ -1,5 +1,5 @@
 # Strata 0.2 on Runpod: Strata's own ready-made image (engine and Terminal built in, nothing is compiled on the pod) plus our layer: SSH, the start
-# logic (data on the local disk, store on the network volume), the queue handler and the load-balancer proxy. Branch strata-v2-dev.
+# logic (data on the local disk, store on the network volume), the queue handler and the load-balancer proxy. Branch main (Strata 0.2).
 #   STRATA_IMAGE  Strata's image: ghcr.io/niko1221/strata:<version>-cuda13 (latest-cuda13 = the newest release of that flavor; pin a version for
 #                 reproducible builds, e.g. 0.2.1-cuda13). cuda12 for drivers 575-579 and older cards (Pascal, Volta).
 ARG STRATA_IMAGE=ghcr.io/niko1221/strata:latest-cuda13

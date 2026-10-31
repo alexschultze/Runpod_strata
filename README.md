@@ -1,8 +1,9 @@
 # Strata on Runpod
 
-> **Branch `strata-v2-dev`: Strata 0.2 integration, work in progress.** The image is built on Strata's own ready-made image (engine included, nothing is
-> compiled on the pod). `v0.2.26` was started on Runpod and works (start time below); speed, Serverless modes and other GPU types are not measured yet. The stable line for Strata 0.1 is the
-> branch `claude/strata-runpod-deploy-zegtn6` (images `v0.1.<n>`); images of this branch are tagged `v0.2.<n>`.
+> **Two lines in this repository.** `main` (this branch) is the **Strata 0.2** line: the image is built on Strata's own ready-made image (engine included,
+> nothing is compiled on the pod) and tagged `v0.2.<n>`. `v0.2.26` and `v0.2.27` were started on Runpod and work (start time and speed below); the Serverless
+> modes and other GPU types are not measured yet. The **Strata 0.1** line (engine built on the pod, images `v0.1.<n>`, last build `v0.1.24`) is frozen on the
+> branch [`strata-v1`](../../tree/strata-v1) and gets no new features.
 
 One Docker image that runs [Strata](https://github.com/Niko1221/Strata) (an OpenAI-compatible server for Qwen3.8-Flash-Next) on a Runpod
 **Pod** or **Serverless** endpoint. The engine is built on the machine the first time, archived on your network volume, and restored in

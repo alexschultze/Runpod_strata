@@ -2,7 +2,7 @@
 
 ## Overview
 
-Runpod image for Strata 0.2 (branch strata-v2-dev), an OpenAI/Anthropic-compatible LLM server for NVIDIA GPUs (structure follows runpod-workers/pod-template),
+Runpod image for Strata 0.2 (branch main), an OpenAI/Anthropic-compatible LLM server for NVIDIA GPUs (structure follows runpod-workers/pod-template),
 for a Pod and for a Serverless endpoint (queue or load balancer).
 
 ## Technology Stack

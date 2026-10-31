@@ -1,4 +1,4 @@
-> **Branch `strata-v2-dev` (Strata 0.2):** Stand und Unterschiede siehe README.md / README_DETAILS.md; dieses Dokument beschreibt überwiegend die 0.1-Linie.
+> **Branch `main` (Strata 0.2):** Stand und Unterschiede siehe README.md / README_DETAILS.md; dieses Dokument beschreibt überwiegend die 0.1-Linie.
 
 # Aufgabenteilung: Cloud-Sitzung <-> lokaler Claude (SSH)
 
@@ -8,7 +8,7 @@ Der lokale Claude hat SSH zum Pod und debuggt dort.
 | | Cloud-Sitzung | Lokal (SSH) |
 |---|---|---|
 | Aufgabe | Dockerfiles, `start.sh`, Strata-Image, Workflows, Doku | Pod pruefen, Fehler reproduzieren, Logs sammeln |
-| Ergebnis | Commit + Push auf `claude/strata-runpod-deploy-zegtn6`, Build per GitHub Actions | `docs/debug-log.md` (kurze Befunde mit Befehl + Ausgabe), Commit + Push auf denselben Branch |
+| Ergebnis | Commit + Push auf `main` (0.1-Linie: `strata-v1`), Build per GitHub Actions | `docs/debug-log.md` (kurze Befunde mit Befehl + Ausgabe), Commit + Push auf denselben Branch |
 
 Regeln: kleine Commits, vor jedem Push `git pull --rebase`. Keine Secrets, Keys oder Tokens ins Repo oder in Logs
 (`PUBLIC_KEY`, `HF_TOKEN`, `RUNPOD_API_KEY` ausschwaerzen).

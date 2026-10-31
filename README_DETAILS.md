@@ -1,4 +1,4 @@
-# Strata on Runpod (branch strata-v2-dev: Strata 0.2)
+# Strata on Runpod (branch main: Strata 0.2)
 
 > **This branch builds on Strata 0.2's ready-made image.** The sections below the line `<!-- 0.1 -->` describe the 0.1 line (compile on the pod, engine archives,
 > `STRATA_CALIBRATE` through `settings.json`, hook in `docker-entrypoint.sh`) and are **outdated on this branch**; they are kept until the 0.2 integration is verified

@@ -1,5 +1,5 @@
 #!/bin/bash
-# Starts Strata 0.2 (its image holds the engine and the Terminal; nothing is compiled here). Branch strata-v2-dev.
+# Starts Strata 0.2 (its image holds the engine and the Terminal; nothing is compiled here). Branch main (Strata 0.2).
 #
 #   1. Data (/data: model, pack, presets, tuning): on the local disk. COPY_DATA_LOCAL=yes (default) copies the store on the volume to it (rsync with progress
 #      every 10 s), no: /data/Strata-data links to the volume. sync.sh pushes /data back to the store once the server is up.

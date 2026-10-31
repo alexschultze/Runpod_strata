@@ -1,4 +1,4 @@
-name: Build and Push Strata Image
+name: Build and Push Strata Image (Strata 0.2)
 
 on:
   workflow_dispatch:
@@ -23,7 +23,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install test tools
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends rsync zstd jq
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends rsync jq
 
       - name: Syntax check of all scripts
         run: for f in *.sh scripts/*.sh tests/*.sh; do bash -n "$f" || exit 1; done
