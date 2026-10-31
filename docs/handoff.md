@@ -15,7 +15,7 @@ Regeln: kleine Commits, vor jedem Push `git pull --rebase`. Keine Secrets, Keys 
 
 ## Stand
 
-- Ein Image: `ghcr.io/alexschultze/strata-runpod:v0.1.<run>` (Workflow `dev.yml`, nur auf Anweisung des Nutzers gestartet). Engine und Daten laufen unter `/tmp`,
+- Ein Image: `ghcr.io/alexschultze/strata-runpod:v0.1.<run>` (Workflow `build-v1.yml` auf `strata-v1`, nur auf Anweisung des Nutzers gestartet). Engine und Daten laufen unter `/tmp`,
   das Volume ist die Ablage (`<volume>/strata-store`). Start per Hand: `STRATA_API_KEY=... /opt/runpod/start.sh` in tmux (`AUTO_START=yes` startet automatisch).
 - Vom Nutzer auf echten Pods geprueft: Start mit Engine-Archiv und Datenkopie (ca. 3,5 min), Kalibrierung auf einer RTX PRO 4500 Blackwell, Queue-Worker und Proxy-URL.
   Noch offen: Neu-Setup bei Hardware-Wechsel, `STRATA_PARALLEL`-Gewinn, Load-Balancer-Modus, `/api_direct`.

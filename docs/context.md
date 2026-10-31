@@ -8,7 +8,7 @@ for a Pod and for a Serverless endpoint (queue or load balancer).
 ## Technology Stack
 
 - **Image**: `FROM ghcr.io/niko1221/strata:<version>-cuda13` (Strata's ready-made image with the engine) + sshd, rsync, fio, jq, a Python venv for the handler; nothing is compiled on the pod
-- **Build/registry**: GitHub Actions (`dev.yml`, started by hand) -> GHCR. Scripts: bash + fio/jq (`scripts/`). Control: `strata/runpod_ctl.py`
+- **Build/registry**: GitHub Actions (`build-v2.yml`, started by hand; 0.1: `build-v1.yml` on `strata-v1`) -> GHCR. Scripts: bash + fio/jq (`scripts/`). Control: `strata/runpod_ctl.py`
 
 ## Project Structure
 
@@ -18,7 +18,7 @@ for a Pod and for a Serverless endpoint (queue or load balancer).
 ├── serverless/                  # proxy.py (/ping, load balancer), handler.py (queue endpoint)
 ├── scripts/                     # check-env, storage/download benchmarks, calibrate, bench-parallel, nvidia-smi shim
 ├── tests/                       # start logic, shim, handler, benchmark client (fake Strata, no GPU)
-├── .github/workflows/dev.yml    # tests, then image build
+├── .github/workflows/build-v2.yml # tests, then image build
 ├── strata/                      # runpod_ctl.py, bench/, README
 └── docs/                        # context.md, handoff.md
 ```

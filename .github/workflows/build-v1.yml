@@ -1,0 +1,16 @@
+# Strata 0.1 line: this file is only a placeholder on main so that GitHub lists the workflow (a workflow_dispatch workflow must exist on the default
+# branch). The real workflow is build-v1.yml on the branch strata-v1: start it with "Run workflow" and choose the branch strata-v1; GitHub then
+# uses that branch's file. Started on any other branch this one does nothing.
+name: Build and Push Strata Image (Strata 0.1)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  placeholder:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Wrong branch
+        run: |
+          echo "This is the placeholder on main. Run the workflow on the branch strata-v1 to build the Strata 0.1 image (v0.1.<n>)."
+          exit 1
