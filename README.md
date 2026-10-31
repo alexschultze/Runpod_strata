@@ -1,5 +1,9 @@
 # Strata on Runpod
 
+> **This is the Strata 0.1 line (images `v0.1.<n>`, last build `v0.1.24`), frozen: it gets no new features.** It needs Strata's 0.1 layout (`setup.sh`,
+> `docker-entrypoint.sh`), so set `STRATA_REF` to a `v0.1.*` tag (for example `v0.1.45`); `latest` is Strata 0.2 and does not work with this image. The current line for Strata 0.2
+> is on [`main`](../../tree/main) (images `v0.2.<n>`).
+
 One Docker image that runs [Strata](https://github.com/Niko1221/Strata) (an OpenAI-compatible server for Qwen3.8-Flash-Next) on a Runpod
 **Pod** or **Serverless** endpoint. The engine is built on the machine the first time, archived on your network volume, and restored in
 minutes afterwards. Details for tinkerers: [README_DETAILS.md](README_DETAILS.md).

@@ -1,4 +1,4 @@
-name: Build and Push Strata Image
+name: Build and Push Strata Image (Strata 0.1)
 
 on:
   workflow_dispatch:
