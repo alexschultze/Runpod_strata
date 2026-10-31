@@ -6,7 +6,7 @@
 | `bench/bench.py` | time to first token and decode tok/s against Strata (or any OpenAI-compatible server) |
 | `bench/bench_parallel.py` | N concurrent streams: tok/s per stream and in total (`/app/scripts/bench-parallel.sh` in the pod) |
 
-The image is built by the GitHub Actions workflow `.github/workflows/dev.yml` (started by hand). The user documentation is in the repo's
+The image is built by the GitHub Actions workflow `.github/workflows/build-v1.yml` (started by hand). The user documentation is in the repo's
 [README.md](../README.md), the details in [README_DETAILS.md](../README_DETAILS.md).
 
 ## runpod_ctl.py

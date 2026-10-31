@@ -1,3 +1,4 @@
+# Strata 0.1 line (branch strata-v1, frozen): image tags v0.1.<n>. The Strata 0.2 line builds with build-v2.yml on main.
 name: Build and Push Strata Image (Strata 0.1)
 
 on:
@@ -41,8 +42,11 @@ jobs:
       - name: Checkout this repo
         uses: actions/checkout@v4
 
-      - name: Set image name (GHCR needs lowercase)
-        run: echo "DOCKER_IMAGE=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/strata-runpod" >> "$GITHUB_ENV"
+      - name: Set image name (GHCR needs lowercase) and version
+        run: |
+          echo "DOCKER_IMAGE=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/strata-runpod" >> "$GITHUB_ENV"
+          # this workflow counts runs from 1; v0.1.24 was the last image built by the old shared workflow (dev.yml), so the numbers go on from there
+          echo "IMAGE_VERSION=0.1.$((GITHUB_RUN_NUMBER + 24))" >> "$GITHUB_ENV"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -62,7 +66,7 @@ jobs:
           platforms: ${{ env.DOCKER_PLATFORM }}
           push: true
           tags: |
-            ${{ env.DOCKER_IMAGE }}:v0.1.${{ github.run_number }}
+            ${{ env.DOCKER_IMAGE }}:v${{ env.IMAGE_VERSION }}
             ${{ env.DOCKER_IMAGE }}:${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max

@@ -9,7 +9,7 @@ for a Pod and for a Serverless endpoint (queue or load balancer).
 
 - **Image**: `nvidia/cuda:13.0.0-devel-ubuntu24.04` + Python, build tools, sshd, rsync, zstd, fio, jq; Strata itself is cloned and its engine built on
   the machine, once per GPU architecture, CPU and Strata version
-- **Build/registry**: GitHub Actions (`dev.yml`, started by hand) -> GHCR. Scripts: bash + fio/jq (`scripts/`). Control: `strata/runpod_ctl.py`
+- **Build/registry**: GitHub Actions (`build-v1.yml`, started by hand) -> GHCR. Scripts: bash + fio/jq (`scripts/`). Control: `strata/runpod_ctl.py`
 
 ## Project Structure
 
@@ -19,7 +19,7 @@ for a Pod and for a Serverless endpoint (queue or load balancer).
 ├── serverless/                  # proxy.py (/ping, load balancer), handler.py (queue endpoint)
 ├── scripts/                     # check-env, storage/download benchmarks, calibrate, bench-parallel, nvidia-smi shim
 ├── tests/                       # start logic, shim, handler, benchmark client (fake Strata, no GPU)
-├── .github/workflows/dev.yml    # tests, then image build
+├── .github/workflows/build-v1.yml # tests, then image build
 ├── strata/                      # runpod_ctl.py, bench/, README
 └── docs/                        # context.md, handoff.md
 ```

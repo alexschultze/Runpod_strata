@@ -5,7 +5,7 @@ Layout follows [runpod-workers/pod-template](https://github.com/runpod-workers/p
 
 ## How it works
 
-One image (`ghcr.io/<owner>/strata-runpod:v0.1.<run>`, built by `.github/workflows/dev.yml`, base `nvidia/cuda:13.0.0-devel-ubuntu24.04`).
+One image (`ghcr.io/<owner>/strata-runpod:v0.1.<run>`, built by `.github/workflows/build-v1.yml`, base `nvidia/cuda:13.0.0-devel-ubuntu24.04`).
 The network volume is slow for small files and random reads (measured: geesefs 8 MiB/s, MooseFS 15 MiB/s at 4 KiB random), so **engine
 and data are installed and run under `/tmp`** (local disk); the volume is only the store.
 
@@ -151,7 +151,7 @@ a config without engine, the API key, calibration per hardware (`STRATA_CALIBRAT
 - `serverless/` - `proxy.py` (`/ping`, load balancer) and `handler.py` (queue endpoint, OpenAI route, `/api_direct`)
 - `scripts/` - benchmarks (`bench-local.sh`, `bench-parallel.sh`), storage tests, environment check, calibration, nvidia-smi shim; `strata/bench/` is `/app/bench/`
 - `strata/` - control tools: `runpod_ctl.py`, `bench/`, README
-- `.github/workflows/dev.yml` - tests, then build in GitHub Actions (started by hand)
+- `.github/workflows/build-v1.yml` - tests, then build in GitHub Actions (started by hand)
 - `tests/` - tests of the start logic, shim, handler and benchmark client
 - `docs/` - context, handoff
 
