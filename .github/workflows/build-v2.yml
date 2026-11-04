@@ -5,9 +5,9 @@ on:
   workflow_dispatch:
     inputs:
       strata_image:
-        description: "Strata's image to build on (pin a version for a reproducible build, e.g. ghcr.io/niko1221/strata:0.2.1-cuda13)"
+        description: "Strata's image to build on, e.g. ghcr.io/niko1221/strata:0.2.9-cuda13. Empty: the repository variable STRATA_IMAGE, else 0.2.9-cuda13"
         required: false
-        default: "ghcr.io/niko1221/strata:latest-cuda13"
+        default: ""
 
 permissions:
   contents: read
@@ -15,6 +15,7 @@ permissions:
 
 env:
   DOCKER_PLATFORM: linux/amd64
+  STRATA_IMAGE: ${{ inputs.strata_image || vars.STRATA_IMAGE || 'ghcr.io/niko1221/strata:0.2.9-cuda13' }}
 
 jobs:
   test:
@@ -35,6 +36,8 @@ jobs:
         run: pip install requests && python3 tests/test_handler.py
       - name: Hardware bench tests (ssd, ram, pcie against a fake driver)
         run: python3 tests/test_bench_hw.py
+      - name: Smoke test script (against a fake image root)
+        run: python3 tests/test_smoke.py
       - name: Bench client tests
         run: python3 tests/test_bench_parallel.py
 
@@ -65,7 +68,37 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push image
+      - name: Pin the base image (digest)
+        run: |
+          d=$(docker buildx imagetools inspect "$STRATA_IMAGE" --format '{{json .Manifest}}' | jq -r .digest) || d=unknown
+          echo "STRATA_BASE_DIGEST=${d:-unknown}" >> "$GITHUB_ENV"
+          echo "Base image: $STRATA_IMAGE @ ${d:-unknown}"
+
+      - name: Build the image (for the smoke test, not pushed)
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: ${{ env.DOCKER_PLATFORM }}
+          load: true
+          push: false
+          provenance: false
+          build-args: |
+            STRATA_IMAGE=${{ env.STRATA_IMAGE }}
+            IMAGE_VERSION=v${{ env.IMAGE_VERSION }}
+            IMAGE_COMMIT=${{ github.sha }}
+            STRATA_BASE_DIGEST=${{ env.STRATA_BASE_DIGEST }}
+          tags: strata-runpod:smoke
+          cache-from: type=gha
+
+      - name: Smoke test of the built image (Strata's entry points, our files)
+        run: |
+          docker run --rm --entrypoint bash -v "$PWD/tests/smoke-image.sh:/smoke.sh:ro" strata-runpod:smoke /smoke.sh
+          # our entry point is still the one in the Dockerfile, and the build info is in the labels
+          test "$(docker inspect --format '{{json .Config.Entrypoint}}' strata-runpod:smoke)" = '["/usr/bin/tini","--","/opt/runpod/entry.sh"]'
+          docker inspect --format '{{json .Config.Labels}}' strata-runpod:smoke | jq -r 'to_entries[] | select(.key | startswith("io.runpod-strata") or startswith("com.strata")) | "  \(.key) = \(.value)"'
+
+      - name: Push image
         uses: docker/build-push-action@v5
         with:
           context: .
@@ -73,7 +106,10 @@ jobs:
           platforms: ${{ env.DOCKER_PLATFORM }}
           push: true
           build-args: |
-            STRATA_IMAGE=${{ inputs.strata_image || 'ghcr.io/niko1221/strata:latest-cuda13' }}
+            STRATA_IMAGE=${{ env.STRATA_IMAGE }}
+            IMAGE_VERSION=v${{ env.IMAGE_VERSION }}
+            IMAGE_COMMIT=${{ github.sha }}
+            STRATA_BASE_DIGEST=${{ env.STRATA_BASE_DIGEST }}
           tags: |
             ${{ env.DOCKER_IMAGE }}:v${{ env.IMAGE_VERSION }}
             ${{ env.DOCKER_IMAGE }}:${{ github.sha }}

@@ -15,8 +15,9 @@ ghcr.io/alexschultze/strata-runpod:<tag>        # the tag of the latest successf
 
 ## Key points
 
-1. **Strata brings its own engine.** The image is built `FROM ghcr.io/niko1221/strata:<version>-cuda13` (build argument `STRATA_IMAGE`, default
-   `latest-cuda13`; pin a version such as `0.2.1-cuda13` for a reproducible build). No compile on the pod: the 3-4 minutes and the engine archives of the 0.1 line are gone.
+1. **Strata brings its own engine.** The image is built `FROM ghcr.io/niko1221/strata:<version>-cuda13` (build argument `STRATA_IMAGE`, pinned
+   to `0.2.9-cuda13` by default; change it with the workflow input `strata_image` or the repository variable `STRATA_IMAGE`). The start log names the image: version,
+   commit and Strata base with its digest. No compile on the pod: the 3-4 minutes and the engine archives of the 0.1 line are gone.
 2. **Serverless: use a network volume** in the same data center. Model, presets and tuning are kept there (`<volume>/strata-store/v2`) and copied to the local disk
    at start, so a new worker does not download or tune again.
 3. **Tuning is per kind of card:** `TUNE=quick` runs Strata's quick tuning (about 20 minutes, once) for a preset that is named after the GPU

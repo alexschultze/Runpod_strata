@@ -43,6 +43,7 @@ hw_banner() {
     echo "start.sh: GPU     ${GPU_COUNT}x ${GPU_NAME}, ${GPU_VRAM_GIB} GiB VRAM, compute capability ${GPU_CC:-?}, driver ${DRIVER:-?}"
     echo "start.sh: CPU     ${CPU_MODEL}; host cores ${HOST_CORES}, pod quota ${CPU_QUOTA:-none} cores"
     echo "start.sh: RAM     pod limit ${POD_RAM_GIB} GiB, host ${HOST_RAM_GIB} GiB"
+    [ -n "${RUNPOD_IMAGE_VERSION:-}" ] && echo "start.sh: image   ${RUNPOD_IMAGE_VERSION} (commit ${RUNPOD_IMAGE_COMMIT:0:7}), Strata base ${RUNPOD_IMAGE_BASE:-?} ${RUNPOD_IMAGE_BASE_DIGEST:0:19}"
     [ -n "${RUNPOD_POD_ID:-}" ] && echo "start.sh: Runpod  id ${RUNPOD_POD_ID}${RUNPOD_ENDPOINT_ID:+, endpoint ${RUNPOD_ENDPOINT_ID}}${RUNPOD_DC_ID:+, data center ${RUNPOD_DC_ID}}"
     [ -n "${RUNPOD_POD_ID:-}" ] && echo "start.sh: URL     https://${RUNPOD_POD_ID}-${PORT:-8080}.proxy.runpod.net/  (HTTP port ${PORT:-8080} through Runpod's proxy; the API key is the only protection)"
     echo "start.sh: disk    $(df -BG --output=avail "${STRATA_LOCAL:-/tmp}" 2>/dev/null | tail -1 | tr -dc 0-9) GiB free under ${STRATA_LOCAL:-/tmp}"

@@ -13,7 +13,7 @@ FROM ghcr.io/niko1221/strata:<version>-cuda13        # STRATA_IMAGE: engine + Te
 ENTRYPOINT tini -- /opt/runpod/entry.sh                # sshd, then (AUTO_START / MODE) start.sh, which ends in Strata's /opt/strata/entrypoint.sh
 ```
 
-- **Image tags** `v0.2.<run>` and the commit SHA (the 0.1 branch keeps `v0.1.<run>`). Build argument `STRATA_IMAGE` (workflow input `strata_image`).
+- **Image tags** `v0.2.<run>` and the commit SHA (the 0.1 branch keeps `v0.1.<run>`). Build argument `STRATA_IMAGE` (workflow input `strata_image`, else the repository variable `STRATA_IMAGE`, else `ghcr.io/niko1221/strata:0.2.9-cuda13`). The workflow resolves the base's digest, builds the image locally, runs `tests/smoke-image.sh` inside it (Strata's entrypoint, its command line, tini, the variables `start.sh` passes, our files) and pushes only when that passes. Labels `io.runpod-strata.*` and the variables `RUNPOD_IMAGE_*` (printed at the start) hold version, commit, base image and digest.
 - **`start.sh`:** info block, volume report, engine report (`strata components engine`), key check, then maps our variables to Strata's (README table), copies
   `<volume>/strata-store/v2/data` to `/data` (rsync with progress, `COPY_DATA_LOCAL=yes`) or links `/data/Strata-data` to the volume (`no`), and starts Strata's
   entrypoint (`exec` in pod mode; in the background beside `handler.py` / `proxy.py` for `queue` / `lb`, Strata on port 8080, the proxy on `LB_PORT`).

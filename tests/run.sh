@@ -29,7 +29,7 @@ echo "weights" > "$T/store/data/Strata-data/models/m.gguf"; echo "secret-key" > 
 
 run() {   # env assignments for this run; the output goes to $OUT. A new DATA_DIR per run unless one is given.
     D=$(mktemp -d "$T/dataXXXX")
-    OUT=$(env -u RUNPOD_BENCH -u RUNPOD_bench -u BENCH_SECONDS -u LOW_RAM -u API_KEY -u STRATA_API_KEY -u TUNE -u RETUNE -u PARALLEL -u STRATA_PARALLEL -u STRATA_CALIBRATE -u STRATA_SET -u PRESET -u COPY_DATA_LOCAL -u MODE \
+    OUT=$(env -u RUNPOD_IMAGE_VERSION -u RUNPOD_BENCH -u RUNPOD_bench -u BENCH_SECONDS -u LOW_RAM -u API_KEY -u STRATA_API_KEY -u TUNE -u RETUNE -u PARALLEL -u STRATA_PARALLEL -u STRATA_CALIBRATE -u STRATA_SET -u PRESET -u COPY_DATA_LOCAL -u MODE \
         PATH="$T/bin:$PATH" STRATA_ENTRYPOINT="$T/entry-fake.sh" STRATA_BIN="$T/bin/strata" DATA_DIR="$D" STRATA_STORE="$T/store" SYNC_WAIT=no \
         API_KEY=k1234567890123456 "$@" timeout 120 bash "$HERE/start.sh" 2>&1)
 }
@@ -58,6 +58,10 @@ run env RUNPOD_BENCH=no; settle
 expect_no "RUNPOD_BENCH=no: no bench"                 "bench:"
 run env; settle
 expect_no "unset: no bench"                           "bench: ----"
+
+echo "1c. the start log names the image"
+run env RUNPOD_IMAGE_VERSION=v0.2.99 RUNPOD_IMAGE_COMMIT=0123456789abcdef RUNPOD_IMAGE_BASE=ghcr.io/niko1221/strata:0.2.9-cuda13 RUNPOD_IMAGE_BASE_DIGEST=sha256:83e37db8625c67b6; settle
+expect    "image version, commit and Strata base"      "image   v0.2.99 \(commit 0123456\), Strata base ghcr.io/niko1221/strata:0.2.9-cuda13 sha256:83e37db8625c"
 
 echo "2. our variables mapped to Strata's"
 run env TUNE=quick PARALLEL=2 STRATA_SET="prefill=65536"; settle

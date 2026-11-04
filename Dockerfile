@@ -1,8 +1,9 @@
 # Strata 0.2 on Runpod: Strata's own ready-made image (engine and Terminal built in, nothing is compiled on the pod) plus our layer: SSH, the start
 # logic (data on the local disk, store on the network volume), the queue handler and the load-balancer proxy. Branch main (Strata 0.2).
-#   STRATA_IMAGE  Strata's image: ghcr.io/niko1221/strata:<version>-cuda13 (latest-cuda13 = the newest release of that flavor; pin a version for
-#                 reproducible builds, e.g. 0.2.1-cuda13). cuda12 for drivers 575-579 and older cards (Pascal, Volta).
-ARG STRATA_IMAGE=ghcr.io/niko1221/strata:latest-cuda13
+#   STRATA_IMAGE  Strata's image: ghcr.io/niko1221/strata:<version>-cuda13, pinned to a version for reproducible builds (latest-cuda13 moves with every
+#                 Strata release). cuda12 for drivers 575-579 and older cards (Pascal, Volta). The workflow takes it from its input, the
+#                 repository variable STRATA_IMAGE, or this default.
+ARG STRATA_IMAGE=ghcr.io/niko1221/strata:0.2.9-cuda13
 FROM ${STRATA_IMAGE}
 
 ENV DEBIAN_FRONTEND=noninteractive
@@ -22,6 +23,16 @@ COPY strata/bench /app/bench
 COPY entry.sh start.sh sshd.sh sync.sh volume-check.sh update-scripts.sh hwinfo.sh /opt/runpod/
 RUN chmod +x /opt/runpod/*.sh /app/scripts/*.sh /app/bench/bench.py /app/scripts/nvidia-smi-shim.py && \
     install -m 755 /app/scripts/nvidia-smi-shim.py /usr/local/bin/nvidia-smi
+
+# what this image is made of, for the start log (hwinfo.sh) and `docker inspect`; last, so a new commit only rebuilds these layers
+ARG STRATA_IMAGE
+ARG IMAGE_VERSION=dev
+ARG IMAGE_COMMIT=unknown
+ARG STRATA_BASE_DIGEST=unknown
+ENV RUNPOD_IMAGE_VERSION=${IMAGE_VERSION} RUNPOD_IMAGE_COMMIT=${IMAGE_COMMIT} RUNPOD_IMAGE_BASE=${STRATA_IMAGE} RUNPOD_IMAGE_BASE_DIGEST=${STRATA_BASE_DIGEST}
+LABEL org.opencontainers.image.source="https://github.com/alexschultze/Runpod_strata" \
+      io.runpod-strata.image-version="${IMAGE_VERSION}" io.runpod-strata.commit="${IMAGE_COMMIT}" \
+      io.runpod-strata.base-image="${STRATA_IMAGE}" io.runpod-strata.base-digest="${STRATA_BASE_DIGEST}"
 
 EXPOSE 22 8080
 
