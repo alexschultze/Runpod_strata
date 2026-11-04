@@ -29,7 +29,7 @@ echo "weights" > "$T/store/data/Strata-data/models/m.gguf"; echo "secret-key" > 
 
 run() {   # env assignments for this run; the output goes to $OUT. A new DATA_DIR per run unless one is given.
     D=$(mktemp -d "$T/dataXXXX")
-    OUT=$(env -u LOW_RAM -u API_KEY -u STRATA_API_KEY -u TUNE -u RETUNE -u PARALLEL -u STRATA_PARALLEL -u STRATA_CALIBRATE -u STRATA_SET -u PRESET -u COPY_DATA_LOCAL -u MODE \
+    OUT=$(env -u RUNPOD_BENCH -u RUNPOD_bench -u BENCH_SECONDS -u LOW_RAM -u API_KEY -u STRATA_API_KEY -u TUNE -u RETUNE -u PARALLEL -u STRATA_PARALLEL -u STRATA_CALIBRATE -u STRATA_SET -u PRESET -u COPY_DATA_LOCAL -u MODE \
         PATH="$T/bin:$PATH" STRATA_ENTRYPOINT="$T/entry-fake.sh" STRATA_BIN="$T/bin/strata" DATA_DIR="$D" STRATA_STORE="$T/store" SYNC_WAIT=no \
         API_KEY=k1234567890123456 "$@" timeout 120 bash "$HERE/start.sh" 2>&1)
 }
@@ -47,6 +47,17 @@ expect    "one preset per kind of card"           "PRESET=docker-fake-gpu-24g-24
 expect    "no tuning by default"                  "TUNE=unset RETUNE=unset"
 OUT=$(env -u API_KEY -u STRATA_API_KEY PATH="$T/bin:$PATH" STRATA_ENTRYPOINT="$T/entry-fake.sh" STRATA_BIN="$T/bin/strata" DATA_DIR="$T/nokey" STRATA_STORE="$T/store" timeout 5 bash "$HERE/start.sh" 2>&1)
 expect    "without an API key Strata is not started" "NOT started"
+
+echo "1b. RUNPOD_BENCH: the hardware bench runs only when asked for"
+run env BENCH_SECONDS=1 RUNPOD_BENCH=ram; settle
+expect    "RUNPOD_BENCH=ram runs the RAM test"        "bench: ram  memcpy"
+expect_no "and only that one"                         "bench: ssd"
+run env BENCH_SECONDS=1 RUNPOD_bench=ram; settle
+expect    "the lower case name works too"             "bench: ram  memcpy"
+run env RUNPOD_BENCH=no; settle
+expect_no "RUNPOD_BENCH=no: no bench"                 "bench:"
+run env; settle
+expect_no "unset: no bench"                           "bench: ----"
 
 echo "2. our variables mapped to Strata's"
 run env TUNE=quick PARALLEL=2 STRATA_SET="prefill=65536"; settle

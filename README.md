@@ -58,6 +58,7 @@ Strata automatically (`MODE=queue` is the default there; set it yourself if your
 | `PARALLEL` | unset | Strata's own: requests answered together (1-8). Leave unset unless you measured a gain |
 | `STRATA_SET` | unset | advanced engine settings, space separated `key=value` (Strata's `--set`), for example `prefill=65536` |
 | `PRESET` | `docker-<gpu>-<vram>g` | Strata's preset name; the default gives every card type its own preset and tuning |
+| `RUNPOD_BENCH` | unset | set it (`1`, or a list such as `ssd,ram,pcie`) to bench the local SSD (fio, sequential), the RAM (memcpy) and the PCIe link (host <-> GPU) at the start, about 10 s each, results in the log. `RUNPOD_bench` works too. By hand: `python3 /app/scripts/bench-hw.py` |
 | `AUTO_START` | `no` | Pods only: `yes` starts Strata without you running `start.sh` |
 | `SSH_PUBLIC_KEY` | – | your public key for SSH into the pod (a Runpod `PUBLIC_KEY` also works) |
 | `SCRIPTS_REF` | unset | a git branch or tag of this repo: the scripts are pulled from it at start instead of the ones in the image |

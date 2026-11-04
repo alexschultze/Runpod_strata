@@ -11,6 +11,7 @@
 #   PARALLEL, TUNE (quick|thorough|skip, default skip: no tuning), RETUNE=1   Strata's own, passed through unchanged
 #   PRESET   Strata's preset name; default docker-<gpu>-<vram>g, so every kind of card gets its own preset and its own tuning
 #   STRATA_SET   advanced engine settings, space separated key=value (replaces STRATA_ENGINE_ARGS)
+#   RUNPOD_BENCH=1|ssd,ram,pcie   bench the local SSD, RAM and PCIe at the start (about 10 s each, shown in the log)
 #   COPY_DATA_LOCAL=yes|no   STRATA_STORE (default <volume>/strata-store/v2)   MODE=pod|lb|queue   LB_PORT=8000 (lb proxy)
 # Ignored by Strata 0.2 (it plans RAM and the engine itself): LOW_RAM, REINSTALL, RESIDENT_BUDGET_GIB, HOST, CONFIG, STRATA_REF, STRATA_REPO.
 set -e
@@ -36,6 +37,13 @@ engine_report
 [ -n "$STRATA_STORE" ] && mkdir -p "$STRATA_STORE/data" "$STRATA_STORE/logs"
 [ -n "$STRATA_STORE" ] || echo "start.sh: no volume found (/runpod-volume, /workspace): nothing is stored, model and tuning are lost with the container"
 mkdir -p "$DATA"
+# RUNPOD_BENCH (also RUNPOD_bench): bench the local SSD, RAM and PCIe before anything is copied (scripts/bench-hw.py, about 10 s each); 1/yes/all = all three, or ssd,ram,pcie
+BENCH="${RUNPOD_BENCH:-${RUNPOD_bench:-}}"
+case "$BENCH" in ""|0|no|No|NO|false|False|off) ;; *)
+    case "$BENCH" in 1|yes|Yes|YES|true|True|on|all) BENCH=all ;; esac
+    BP="${APP_DIR:-/app}/scripts/bench-hw.py"; [ -f "$BP" ] || BP="$HERE/scripts/bench-hw.py"
+    timeout 120 python3 "$BP" --only "$BENCH" --dir "$DATA" || echo "start.sh: the hardware bench failed or timed out (ignored)" ;;
+esac
 [ -n "$STRATA_STORE" ] && [ -x "$HERE/volume-check.sh" ] && "$HERE/volume-check.sh" "$STRATA_STORE" || true
 
 fail_alive() { echo "start.sh: $*" >&2; exec sleep infinity; }   # keeps the pod (and sshd) up so you can look around
