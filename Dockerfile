@@ -11,7 +11,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 # openssh-server (SSH), rsync (volume <-> local copies), fio/jq (benchmarks, JSON), tmux/htop/nano, curl, Python with venv for the handler
 RUN apt-get update --yes && \
     apt-get install --yes --no-install-recommends \
-    openssh-server rsync fio jq tmux htop nano curl \
+    openssh-server rsync fio jq tmux htop nano curl dmidecode \
     python3 python3-pip python3-venv \
     && rm -rf /var/lib/apt/lists/* && \
     python3 -m venv /opt/runpod/venv && \

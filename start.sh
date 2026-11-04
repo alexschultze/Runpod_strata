@@ -15,7 +15,7 @@
 #   COPY_DATA_LOCAL=yes|no   STRATA_STORE (default <volume>/strata-store/v2)   MODE=pod|lb|queue   LB_PORT=8000 (lb proxy)
 # Ignored by Strata 0.2 (it plans RAM and the engine itself): LOW_RAM, REINSTALL, RESIDENT_BUDGET_GIB, HOST, CONFIG, STRATA_REF, STRATA_REPO.
 set -e
-. "$(dirname "$(readlink -f "$0")")/hwinfo.sh"; hw_detect; hw_banner   # first thing: which instance is this
+. "$(dirname "$(readlink -f "$0")")/hwinfo.sh"; hw_detect; hw_banner; hw_details   # first thing: which instance is this
 HERE="$(dirname "$(readlink -f "$0")")"
 if [ -z "${MODE:-}" ] && [ -n "${RUNPOD_ENDPOINT_ID:-}" ]; then MODE=queue; echo "start.sh: Serverless worker (RUNPOD_ENDPOINT_ID set), MODE=queue (set MODE=lb for a load-balancing endpoint)"; fi
 MODE="${MODE:-pod}"

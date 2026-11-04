@@ -80,7 +80,7 @@ All other variables are listed in [README_DETAILS.md](README_DETAILS.md).
 | `TUNE=quick` on a card type nobody has tuned | + up to about 20 minutes (Strata's quick tuning), once per card type |
 | Image not yet cached on the host | + pull of the image (Strata's engine image is about 640 MB to download, ours adds SSH, Python and tools; not measured) |
 
-At start the log shows an **info block** (GPU, VRAM, CPU, RAM, Runpod ids, URL), the **volume** and the **engine** of the image, then a progress line every 10 s while copying.
+At start the log shows an **info block** (GPU, VRAM, CPU, RAM, image version, Runpod ids, URL), a **details block** (kernel and virtualization, CPU caches, NUMA and instruction sets, free RAM and DIMM layout, memlock and /dev/shm limits, PCIe link and power of the GPU, disks, DNS check of github.com, huggingface.co and ghcr.io), the **volume** and the **engine** of the image, then a progress line every 10 s while copying.
 
 ## Measured performance (for reference)
 

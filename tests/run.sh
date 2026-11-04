@@ -63,6 +63,15 @@ echo "1c. the start log names the image"
 run env RUNPOD_IMAGE_VERSION=v0.2.99 RUNPOD_IMAGE_COMMIT=0123456789abcdef RUNPOD_IMAGE_BASE=ghcr.io/niko1221/strata:0.2.9-cuda13 RUNPOD_IMAGE_BASE_DIGEST=sha256:83e37db8625c67b6; settle
 expect    "image version, commit and Strata base"      "image   v0.2.99 \(commit 0123456\), Strata base ghcr.io/niko1221/strata:0.2.9-cuda13 sha256:83e37db8625c"
 
+echo "1d. more details at the start, and the DIMM parser"
+run env; settle
+expect    "details block"                              "---- details ----"
+expect    "cpu line"                                   "start.sh: cpu     [0-9]+ socket"
+expect    "memory and limits"                          "start.sh: limits  memlock"
+expect    "network names are checked"                  "start.sh: network DNS servers"
+DIMMS=$(printf 'Memory Device\n\tSize: 32 GB\n\tType: DDR4\n\tSpeed: 3200 MT/s\n\tConfigured Memory Speed: 3200 MT/s\nMemory Device\n\tSize: 32768 MB\n\tType: DDR4\n\tSpeed: 3200 MT/s\n\tConfigured Memory Speed: 3200 MT/s\nMemory Device\n\tSize: No Module Installed\n\tType: Unknown\n' | bash -c ". '$HERE/hwinfo.sh'; hw_dimms")
+[ "$DIMMS" = "2 of 3 slots populated: 2 x 32 GB DDR4, 3200 MT/s configured (rated 3200), ~51 GB/s peak if every DIMM has its own channel" ] && ok "DIMM layout from dmidecode output" || bad "DIMM parser gave: $DIMMS"
+
 echo "2. our variables mapped to Strata's"
 run env TUNE=quick PARALLEL=2 STRATA_SET="prefill=65536"; settle
 expect    "calibrate yes: tune quick"             "TUNE=quick RETUNE=unset"
